@@ -1,0 +1,161 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { X, FileText } from "lucide-react";
+import { prisma } from "@/lib/db";
+import { requireUser } from "@/lib/auth";
+import { can } from "@/lib/rbac";
+import { Card, CardContent, CardHeader, CardTitle, Badge, PageHeader, Select, Button } from "@/components/ui";
+import { DescItem } from "@/components/widgets";
+import { evidenceStatus, confidentiality as confMeta } from "@/lib/labels";
+import { formatDate, formatBytes } from "@/lib/utils";
+import { AiPanel, StatusControl } from "./EvidenceActions";
+import { unlinkCriterionAction, linkCriterionForm } from "../actions";
+
+export default async function EvidenceDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const user = await requireUser();
+
+  const evidence = await prisma.evidence.findUnique({
+    where: { id },
+    include: {
+      program: true,
+      document: { include: { _count: { select: { chunks: true } } } },
+      uploadedBy: true,
+      approvedBy: true,
+      cycle: { include: { standardSet: { include: { standards: { orderBy: { order: "asc" }, include: { criteria: { orderBy: { order: "asc" } } } } } } } },
+      criterionLinks: { include: { criterion: { include: { standard: true } } } },
+    },
+  });
+  if (!evidence) notFound();
+
+  const allCriteria = evidence.cycle
+    ? evidence.cycle.standardSet.standards.flatMap((s) => s.criteria)
+    : [];
+  const linkedIds = new Set(evidence.criterionLinks.map((l) => l.criterionId));
+  const linkableCriteria = allCriteria.filter((c) => !linkedIds.has(c.id));
+
+  const canWrite = can(user.role, "evidence:write");
+  const canApprove = can(user.role, "evidence:approve");
+
+  return (
+    <div>
+      <PageHeader
+        title={`${evidence.code} — ${evidence.title}`}
+        description={`Minh chứng · ${evidence.program.code}`}
+        actions={<Badge color={evidenceStatus[evidence.status].color}>{evidenceStatus[evidence.status].label}</Badge>}
+      />
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Thông tin minh chứng</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <dl className="grid grid-cols-2 gap-x-6 divide-slate-100">
+                <DescItem label="Đơn vị cung cấp">{evidence.providerUnit ?? "—"}</DescItem>
+                <DescItem label="Mức bảo mật">
+                  <Badge color={confMeta[evidence.confidentiality].color}>{confMeta[evidence.confidentiality].label}</Badge>
+                </DescItem>
+                <DescItem label="Tệp">
+                  {evidence.fileName ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <FileText className="h-4 w-4 text-slate-400" />
+                      {evidence.fileName} ({formatBytes(evidence.fileSize)})
+                    </span>
+                  ) : (
+                    "Không có tệp"
+                  )}
+                </DescItem>
+                <DescItem label="Phiên bản">{evidence.version}</DescItem>
+                <DescItem label="Người tải lên">{evidence.uploadedBy?.fullName ?? "—"}</DescItem>
+                <DescItem label="Người duyệt">
+                  {evidence.approvedBy ? `${evidence.approvedBy.fullName} · ${formatDate(evidence.approvedAt)}` : "—"}
+                </DescItem>
+              </dl>
+              {evidence.description && <p className="mt-2 text-sm text-slate-600">{evidence.description}</p>}
+            </CardContent>
+          </Card>
+
+          {evidence.document?.summary && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Tóm tắt nội dung (đã trích xuất)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="prose-ai text-slate-700">{evidence.document.summary}</p>
+                <p className="mt-2 text-xs text-slate-400">
+                  {evidence.document._count.chunks} đoạn văn bản đã lập chỉ mục cho hỏi đáp AI.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          <AiPanel evidenceId={evidence.id} canWrite={canWrite} />
+        </div>
+
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Trạng thái & vòng đời</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <StatusControl evidenceId={evidence.id} current={evidence.status} canApprove={canApprove} canWrite={canWrite} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Tiêu chí liên kết ({evidence.criterionLinks.length})</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {evidence.criterionLinks.length === 0 && <p className="text-sm text-slate-500">Chưa liên kết tiêu chí nào.</p>}
+              {evidence.criterionLinks.map((l) => (
+                <div key={l.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 px-3 py-2">
+                  <div className="text-sm">
+                    <span className="font-medium text-slate-800">{l.criterion.code}</span>{" "}
+                    <span className="text-slate-600">{l.criterion.title}</span>
+                    {l.suggestedByAi && (
+                      <Badge color="purple" className="ml-1">
+                        AI
+                      </Badge>
+                    )}
+                  </div>
+                  {canWrite && (
+                    <form action={unlinkCriterionAction.bind(null, evidence.id, l.criterionId)}>
+                      <button type="submit" className="text-slate-400 hover:text-red-500" title="Bỏ liên kết">
+                        <X className="h-4 w-4" />
+                      </button>
+                    </form>
+                  )}
+                </div>
+              ))}
+
+              {canWrite && linkableCriteria.length > 0 && (
+                <form action={linkCriterionForm.bind(null, evidence.id)} className="mt-3 flex gap-2">
+                  <Select name="criterionId" defaultValue="" className="text-xs">
+                    <option value="" disabled>
+                      — Gắn tiêu chí —
+                    </option>
+                    {linkableCriteria.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.code} — {c.title}
+                      </option>
+                    ))}
+                  </Select>
+                  <Button type="submit" size="sm" variant="outline">
+                    Gắn
+                  </Button>
+                </form>
+              )}
+            </CardContent>
+          </Card>
+
+          <Link href={`/evidence?program=${evidence.programId}`} className="block text-center text-sm text-brand-600 hover:underline">
+            ← Về danh sách minh chứng
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}

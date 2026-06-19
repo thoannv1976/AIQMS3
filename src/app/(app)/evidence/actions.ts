@@ -1,0 +1,204 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { prisma } from "@/lib/db";
+import { requireUser } from "@/lib/auth";
+import { can } from "@/lib/rbac";
+import { logAudit } from "@/lib/audit";
+import { saveFile, buildEvidencePath } from "@/lib/storage";
+import { processEvidenceDocument } from "@/lib/ai/documents";
+import { summarizeText, suggestCriteria } from "@/lib/ai/features";
+import { EvidenceStatus, AiAnalysisType, Confidentiality } from "@/generated/prisma/enums";
+import type { Prisma } from "@/generated/prisma/client";
+
+export interface FormState {
+  error?: string;
+}
+
+export async function uploadEvidence(_prev: FormState, formData: FormData): Promise<FormState> {
+  const user = await requireUser();
+  if (!can(user.role, "evidence:write")) return { error: "Bạn không có quyền tải minh chứng." };
+
+  const programId = String(formData.get("programId") || "");
+  const title = String(formData.get("title") || "").trim();
+  const code = String(formData.get("code") || "").trim();
+  const description = String(formData.get("description") || "").trim() || null;
+  const providerUnit = String(formData.get("providerUnit") || "").trim() || user.unit || null;
+  const confidentiality = (String(formData.get("confidentiality") || "INTERNAL") as Confidentiality) || "INTERNAL";
+  const criterionId = String(formData.get("criterionId") || "") || null;
+  const file = formData.get("file") as File | null;
+
+  if (!programId || !title || !code) return { error: "Vui lòng nhập chương trình, mã và tên minh chứng." };
+
+  const program = await prisma.program.findUnique({ where: { id: programId } });
+  if (!program) return { error: "Chương trình không tồn tại." };
+
+  const dup = await prisma.evidence.findUnique({ where: { programId_code: { programId, code } } });
+  if (dup) return { error: `Mã minh chứng "${code}" đã tồn tại trong chương trình.` };
+
+  const cycle = await prisma.accreditationCycle.findFirst({ where: { programId }, orderBy: { year: "desc" } });
+
+  let storagePath: string | null = null;
+  let checksum: string | null = null;
+  let fileName: string | null = null;
+  let fileType: string | null = null;
+  let fileSize: number | null = null;
+  let buffer: Buffer | null = null;
+
+  if (file && file.size > 0) {
+    buffer = Buffer.from(await file.arrayBuffer());
+    fileName = file.name;
+    fileType = file.type || null;
+    fileSize = file.size;
+    const rel = buildEvidencePath({
+      programCode: program.code,
+      year: cycle?.year ?? new Date().getFullYear(),
+      criterionCode: null,
+      fileName: file.name,
+    });
+    const stored = await saveFile(rel, buffer);
+    storagePath = stored.storagePath;
+    checksum = stored.checksum;
+  }
+
+  const evidence = await prisma.evidence.create({
+    data: {
+      programId,
+      cycleId: cycle?.id ?? null,
+      code,
+      title,
+      description,
+      providerUnit,
+      confidentiality,
+      fileName,
+      fileType,
+      fileSize,
+      storagePath,
+      checksum,
+      status: EvidenceStatus.UPLOADED,
+      uploadedById: user.id,
+      criterionLinks: criterionId ? { create: [{ criterionId }] } : undefined,
+    },
+  });
+
+  await logAudit({ userId: user.id, action: "UPLOAD", entityType: "Evidence", entityId: evidence.id, detail: { code } });
+
+  // Extract text + build RAG chunks (best-effort).
+  if (buffer && fileName) {
+    try {
+      await processEvidenceDocument({ evidenceId: evidence.id, programId, buffer, fileName, fileType: fileType ?? undefined });
+    } catch (e) {
+      console.error("[evidence] document processing failed:", e);
+    }
+  }
+
+  revalidatePath("/evidence");
+  redirect(`/evidence/${evidence.id}`);
+}
+
+export async function summarizeEvidenceAction(evidenceId: string): Promise<{ text: string; usedFallback: boolean }> {
+  const user = await requireUser();
+  const evidence = await prisma.evidence.findUnique({ where: { id: evidenceId }, include: { document: true } });
+  if (!evidence) return { text: "Không tìm thấy minh chứng.", usedFallback: true };
+
+  const text = evidence.document?.extractedText || evidence.description || evidence.title;
+  const res = await summarizeText(text, evidence.title);
+
+  await prisma.aiAnalysisResult.create({
+    data: {
+      type: AiAnalysisType.SUMMARY,
+      targetType: "evidence",
+      targetId: evidenceId,
+      result: res.text,
+      model: res.model,
+      usedFallback: res.usedFallback,
+      createdById: user.id,
+    },
+  });
+  if (evidence.document) {
+    await prisma.document.update({ where: { id: evidence.document.id }, data: { summary: res.text } });
+  }
+  await logAudit({ userId: user.id, action: "AI_SUMMARY", entityType: "Evidence", entityId: evidenceId });
+  return { text: res.text, usedFallback: res.usedFallback };
+}
+
+export async function suggestCriteriaAction(
+  evidenceId: string,
+): Promise<{ text: string; usedFallback: boolean; suggestions: Array<{ id: string; code: string; title: string; score: number }> }> {
+  const user = await requireUser();
+  const evidence = await prisma.evidence.findUnique({
+    where: { id: evidenceId },
+    include: { document: true, cycle: { include: { standardSet: { include: { standards: { include: { criteria: true } } } } } } },
+  });
+  if (!evidence) return { text: "Không tìm thấy minh chứng.", usedFallback: true, suggestions: [] };
+
+  const cycle =
+    evidence.cycle ??
+    (await prisma.accreditationCycle.findFirst({
+      where: { programId: evidence.programId },
+      orderBy: { year: "desc" },
+      include: { standardSet: { include: { standards: { include: { criteria: true } } } } },
+    }));
+
+  const criteria = cycle ? cycle.standardSet.standards.flatMap((s) => s.criteria) : [];
+  const text = evidence.document?.extractedText || evidence.description || evidence.title;
+  const res = await suggestCriteria(text, criteria.map((c) => ({ id: c.id, code: c.code, title: c.title, description: c.description })));
+
+  await prisma.aiAnalysisResult.create({
+    data: {
+      type: AiAnalysisType.CRITERION_SUGGESTION,
+      targetType: "evidence",
+      targetId: evidenceId,
+      result: res.text,
+      data: res.data as unknown as Prisma.InputJsonValue,
+      model: res.model,
+      usedFallback: res.usedFallback,
+      createdById: user.id,
+    },
+  });
+  await logAudit({ userId: user.id, action: "AI_SUGGEST_CRITERIA", entityType: "Evidence", entityId: evidenceId });
+  return { text: res.text, usedFallback: res.usedFallback, suggestions: res.data };
+}
+
+export async function linkCriterionAction(evidenceId: string, criterionId: string, suggestedByAi = false): Promise<void> {
+  const user = await requireUser();
+  if (!can(user.role, "evidence:write")) return;
+  await prisma.evidenceCriterionLink.upsert({
+    where: { evidenceId_criterionId: { evidenceId, criterionId } },
+    update: {},
+    create: { evidenceId, criterionId, suggestedByAi },
+  });
+  await logAudit({ userId: user.id, action: "LINK_CRITERION", entityType: "Evidence", entityId: evidenceId, detail: { criterionId } });
+  revalidatePath(`/evidence/${evidenceId}`);
+}
+
+export async function linkCriterionForm(evidenceId: string, formData: FormData): Promise<void> {
+  const criterionId = String(formData.get("criterionId") || "");
+  if (criterionId) await linkCriterionAction(evidenceId, criterionId, false);
+}
+
+export async function unlinkCriterionAction(evidenceId: string, criterionId: string): Promise<void> {
+  const user = await requireUser();
+  if (!can(user.role, "evidence:write")) return;
+  await prisma.evidenceCriterionLink.deleteMany({ where: { evidenceId, criterionId } });
+  revalidatePath(`/evidence/${evidenceId}`);
+}
+
+export async function setEvidenceStatusAction(evidenceId: string, status: EvidenceStatus): Promise<void> {
+  const user = await requireUser();
+  const isApproval = status === EvidenceStatus.APPROVED;
+  if (isApproval && !can(user.role, "evidence:approve")) return;
+  if (!isApproval && !can(user.role, "evidence:write")) return;
+
+  await prisma.evidence.update({
+    where: { id: evidenceId },
+    data: {
+      status,
+      approvedById: isApproval ? user.id : undefined,
+      approvedAt: isApproval ? new Date() : undefined,
+    },
+  });
+  await logAudit({ userId: user.id, action: isApproval ? "APPROVE" : "UPDATE_STATUS", entityType: "Evidence", entityId: evidenceId, detail: { status } });
+  revalidatePath(`/evidence/${evidenceId}`);
+}

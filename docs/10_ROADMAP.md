@@ -1,0 +1,31 @@
+# 10 — Roadmap theo giai đoạn
+
+Theo định hướng 6 giai đoạn (0–5); khi trình bày lãnh đạo có thể gộp thành 3 giai đoạn chiến lược.
+
+## Giai đoạn 0 — Chuẩn hóa yêu cầu ✅
+Bộ tài liệu `docs/` (PRD, MVP scope, roles, DB schema, API, AI, UI, reports, deployment).
+
+## Giai đoạn 1 — Nền tảng lõi ✅
+Đăng nhập, RBAC, đơn vị, chương trình ĐT, chu kỳ kiểm định, dashboard, audit log.
+
+## Giai đoạn 2 — Tiêu chuẩn, nhiệm vụ & minh chứng ✅
+Bộ tiêu chuẩn AUN-QA, tiêu chí, nhiệm vụ Kanban, upload & quản lý minh chứng, gắn tiêu chí, duyệt, vòng đời.
+
+## Giai đoạn 3 — Báo cáo & AI cơ bản ✅ (mốc MVP)
+Báo cáo tiến độ/danh mục minh chứng; SAR; AI tóm tắt, gợi ý tiêu chí, soạn/rà soát SAR, chatbot RAG.
+
+## Giai đoạn 4 — AI nâng cao & quản trị chất lượng (kế tiếp)
+- AI Gap Analysis theo tiêu chí; kiểm tra logic PLO–CLO–Assessment–Rubric; rà soát đề cương tự động.
+- AI Review SAR nâng cao; **Accreditation Readiness Score**; **Evidence Strength Score**.
+- Quản lý PDCA nâng cao (minh chứng trước/sau cải tiến); module giải trình đánh giá ngoài.
+- Khảo sát nâng cao; phân tích xu hướng qua nhiều chu kỳ.
+
+## Giai đoạn 5 — Pilot, Cloud Run & mở rộng
+- Pilot 1 chương trình với dữ liệu thật; deploy Cloud Run + Cloud SQL + Cloud Storage + Secret Manager.
+- Xuất báo cáo Word/PDF; benchmark nhiều chương trình; tích hợp LMS/Moodle/cổng đào tạo; SSO/Identity Platform.
+- Nâng RAG: embeddings provider thật + **pgvector / Vertex AI Vector Search**.
+
+## Gộp 3 giai đoạn chiến lược
+1. **Xây dựng MVP** (GĐ 0–3) — đã hoàn thành.
+2. **Nâng cấp AI thông minh** (GĐ 4).
+3. **Triển khai & nhân rộng** (GĐ 5).

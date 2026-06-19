@@ -1,0 +1,756 @@
+// AIQMS3 — AI-integrated Quality Assurance & Program Accreditation Management System
+// PostgreSQL schema. File evidence is stored in object storage; the DB keeps metadata,
+// extracted text, chunks and embeddings (3-layer storage model from the spec).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================ ENUMS ============================
+
+enum Role {
+  ADMIN // System administrator
+  BOARD // Ban Giám hiệu / Board of management
+  QA_OFFICE // Phòng Khảo thí & Đảm bảo chất lượng
+  TRAINING_OFFICE // Phòng Đào tạo
+  FACULTY // Khoa / Viện
+  DEPARTMENT // Bộ môn
+  LECTURER // Giảng viên
+  HR_OFFICE // Phòng Tổ chức nhân sự
+  LIBRARY // Thư viện
+  IT_CENTER // Trung tâm CNTT
+  STUDENT_AFFAIRS // Phòng Công tác sinh viên
+}
+
+enum DegreeLevel {
+  BACHELOR
+  MASTER
+  DOCTORATE
+}
+
+enum ProgramVersionStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum ContributionLevel {
+  INTRODUCED // I
+  REINFORCED // R
+  MASTERED // M
+}
+
+enum CloPloStrength {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum SyllabusStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  ARCHIVED
+}
+
+enum CycleStatus {
+  PLANNING
+  SELF_ASSESSMENT
+  INTERNAL_REVIEW
+  EXTERNAL_REVIEW
+  IMPROVEMENT
+  CLOSED
+}
+
+enum EvidenceStatus {
+  UPLOADED
+  PROCESSING
+  DRAFT
+  SUBMITTED
+  REVIEWED
+  NEEDS_REVISION
+  APPROVED
+  USED_IN_REPORT
+  ARCHIVED
+}
+
+enum Confidentiality {
+  PUBLIC
+  INTERNAL
+  CONFIDENTIAL
+  RESTRICTED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  REVIEW
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum ReportStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
+  PUBLISHED
+}
+
+enum ReportSectionStatus {
+  NOT_STARTED
+  DRAFTING
+  REVIEW
+  DONE
+}
+
+enum PdcaStatus {
+  PLAN
+  DO
+  CHECK
+  ACT
+  COMPLETED
+}
+
+enum SurveyAudience {
+  STUDENT
+  ALUMNI
+  LECTURER
+  EMPLOYER
+  PARTNER
+}
+
+enum SurveyStatus {
+  DRAFT
+  OPEN
+  CLOSED
+}
+
+enum QuestionType {
+  LIKERT
+  OPEN
+  SINGLE_CHOICE
+  MULTI_CHOICE
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AiAnalysisType {
+  SUMMARY
+  CRITERION_SUGGESTION
+  SAR_DRAFT
+  SAR_REVIEW
+  GAP_ANALYSIS
+  MATRIX_CHECK
+  SYLLABUS_REVIEW
+  SURVEY_ANALYSIS
+  IMPROVEMENT_SUGGESTION
+  RISK_ASSESSMENT
+  CHAT
+}
+
+// ============================ ORGANISATION ============================
+
+model University {
+  id        String     @id @default(cuid())
+  code      String     @unique
+  name      String
+  address   String?
+  createdAt DateTime   @default(now())
+  faculties Faculty[]
+}
+
+model Faculty {
+  id           String       @id @default(cuid())
+  universityId String
+  university   University    @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  code         String       @unique
+  name         String
+  createdAt    DateTime     @default(now())
+  departments  Department[]
+  programs     Program[]
+}
+
+model Department {
+  id        String    @id @default(cuid())
+  facultyId String
+  faculty   Faculty   @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+  code      String    @unique
+  name      String
+  createdAt DateTime  @default(now())
+  users     User[]
+}
+
+// ============================ USERS & RBAC ============================
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  role         Role     @default(LECTURER)
+  title        String?
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  unit         String? // free-text unit label (for org units without a Department record)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  programRoles      UserProgramRole[]
+  uploadedEvidence  Evidence[]        @relation("EvidenceUploader")
+  approvedEvidence  Evidence[]        @relation("EvidenceApprover")
+  assignedTasks     Task[]            @relation("TaskAssignee")
+  createdTasks      Task[]            @relation("TaskCreator")
+  assignedSections  ReportSection[]   @relation("SectionAssignee")
+  reviewedSections  ReportSection[]   @relation("SectionReviewer")
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+  aiResults         AiAnalysisResult[]
+  chatSessions      AiChatSession[]
+  approvalsRequested ApprovalFlow[]   @relation("ApprovalRequester")
+  approvalsToDecide  ApprovalFlow[]   @relation("ApprovalApprover")
+}
+
+model UserProgramRole {
+  id        String  @id @default(cuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  programId String
+  program   Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+  role      Role
+
+  @@unique([userId, programId, role])
+}
+
+// ============================ PROGRAMS ============================
+
+model Program {
+  id          String      @id @default(cuid())
+  facultyId   String
+  faculty     Faculty     @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+  code        String      @unique
+  nameVi      String
+  nameEn      String?
+  degreeLevel DegreeLevel @default(BACHELOR)
+  totalCredits Int?
+  objectives  String?     // mục tiêu đào tạo
+  description String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  versions          ProgramVersion[]
+  courses           Course[]
+  plos              Plo[]
+  curriculumMaps    CurriculumMap[]
+  cycles            AccreditationCycle[]
+  evidence          Evidence[]
+  programRoles      UserProgramRole[]
+  surveys           Survey[]
+  improvementPlans  ImprovementPlan[]
+  outcomeAssessments OutcomeAssessment[]
+  tasks             Task[]
+  documents         Document[]
+  chatSessions      AiChatSession[]
+}
+
+model ProgramVersion {
+  id           String               @id @default(cuid())
+  programId    String
+  program      Program              @relation(fields: [programId], references: [id], onDelete: Cascade)
+  versionLabel String // e.g. "2026"
+  year         Int
+  status       ProgramVersionStatus @default(DRAFT)
+  summary      String?
+  changeReason String?
+  effectiveDate DateTime?
+  createdAt    DateTime             @default(now())
+
+  @@unique([programId, versionLabel])
+}
+
+model Course {
+  id        String   @id @default(cuid())
+  programId String
+  program   Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  code      String
+  nameVi    String
+  nameEn    String?
+  credits   Int      @default(3)
+  semester  Int?
+  type      String? // core / elective / general
+  createdAt DateTime @default(now())
+
+  clos           Clo[]
+  syllabi        CourseSyllabus[]
+  curriculumMaps CurriculumMap[]
+  rubrics        Rubric[]
+
+  @@unique([programId, code])
+}
+
+model CourseSyllabus {
+  id                String         @id @default(cuid())
+  courseId          String
+  course            Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  version           String         @default("1.0")
+  objectives        String?
+  content           String?
+  teachingMethods   String?
+  assessmentMethods String?
+  materials         String?
+  schedule          String?
+  requirements      String?
+  status            SyllabusStatus @default(DRAFT)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+}
+
+// ============================ OUTCOMES & MATRICES ============================
+
+model Plo {
+  id          String  @id @default(cuid())
+  programId   String
+  program     Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+  code        String // PLO1, PLO2...
+  description String
+  category    String? // knowledge / skill / autonomy
+  createdAt   DateTime @default(now())
+
+  curriculumMaps CurriculumMap[]
+  cloLinks       CloPloLink[]
+
+  @@unique([programId, code])
+}
+
+model Clo {
+  id          String   @id @default(cuid())
+  courseId    String
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  code        String // CLO1...
+  description String
+  createdAt   DateTime @default(now())
+
+  ploLinks CloPloLink[]
+
+  @@unique([courseId, code])
+}
+
+// Course ↔ PLO contribution matrix (Introduced / Reinforced / Mastered)
+model CurriculumMap {
+  id        String            @id @default(cuid())
+  programId String
+  program   Program           @relation(fields: [programId], references: [id], onDelete: Cascade)
+  courseId  String
+  course    Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  ploId     String
+  plo       Plo               @relation(fields: [ploId], references: [id], onDelete: Cascade)
+  level     ContributionLevel
+
+  @@unique([courseId, ploId])
+}
+
+// CLO ↔ PLO linkage matrix
+model CloPloLink {
+  id       String         @id @default(cuid())
+  cloId    String
+  clo      Clo            @relation(fields: [cloId], references: [id], onDelete: Cascade)
+  ploId    String
+  plo      Plo            @relation(fields: [ploId], references: [id], onDelete: Cascade)
+  strength CloPloStrength @default(MEDIUM)
+
+  @@unique([cloId, ploId])
+}
+
+model Rubric {
+  id        String   @id @default(cuid())
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  name      String
+  criteria  Json? // [{ criterion, levels:[{label, descriptor, score}] }]
+  createdAt DateTime @default(now())
+}
+
+// ============================ ACCREDITATION ============================
+
+model AccreditationStandardSet {
+  id          String     @id @default(cuid())
+  code        String     @unique // AUNQA_V4, MOET_TT04
+  name        String
+  description String?
+  createdAt   DateTime   @default(now())
+  standards   Standard[]
+  cycles      AccreditationCycle[]
+}
+
+model Standard {
+  id          String   @id @default(cuid())
+  setId       String
+  set         AccreditationStandardSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  code        String // "1"
+  title       String
+  description String?
+  order       Int      @default(0)
+  criteria    Criterion[]
+  reportSections ReportSection[]
+
+  @@unique([setId, code])
+}
+
+model Criterion {
+  id          String   @id @default(cuid())
+  standardId  String
+  standard    Standard @relation(fields: [standardId], references: [id], onDelete: Cascade)
+  code        String // "1.1"
+  title       String
+  description String?
+  order       Int      @default(0)
+
+  evidenceLinks    EvidenceCriterionLink[]
+  reportSections   ReportSection[]
+  improvementPlans ImprovementPlan[]
+  tasks            Task[]
+  recommendations  Recommendation[]
+
+  @@unique([standardId, code])
+}
+
+model AccreditationCycle {
+  id           String      @id @default(cuid())
+  programId    String
+  program      Program     @relation(fields: [programId], references: [id], onDelete: Cascade)
+  standardSetId String
+  standardSet  AccreditationStandardSet @relation(fields: [standardSetId], references: [id])
+  name         String // "Kiểm định AUN-QA 2026"
+  year         Int
+  startDate    DateTime?
+  targetDate   DateTime?
+  status       CycleStatus @default(PLANNING)
+  createdAt    DateTime    @default(now())
+
+  evidence        Evidence[]
+  reports         SelfAssessmentReport[]
+  tasks           Task[]
+  improvementPlans ImprovementPlan[]
+  recommendations Recommendation[]
+}
+
+model Evidence {
+  id              String          @id @default(cuid())
+  programId       String
+  program         Program         @relation(fields: [programId], references: [id], onDelete: Cascade)
+  cycleId         String?
+  cycle           AccreditationCycle? @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+  code            String // E-1.1-01
+  title           String
+  description     String?
+  providerUnit    String? // đơn vị cung cấp
+  fileName        String?
+  fileType        String?
+  fileSize        Int?
+  storagePath     String? // path/URL in object storage
+  checksum        String?
+  version         String          @default("1.0")
+  status          EvidenceStatus  @default(UPLOADED)
+  confidentiality Confidentiality @default(INTERNAL)
+  uploadedById    String?
+  uploadedBy      User?           @relation("EvidenceUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  approvedById    String?
+  approvedBy      User?           @relation("EvidenceApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt      DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  criterionLinks EvidenceCriterionLink[]
+  document       Document?
+
+  @@unique([programId, code])
+}
+
+model EvidenceCriterionLink {
+  id          String    @id @default(cuid())
+  evidenceId  String
+  evidence    Evidence  @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  criterionId String
+  criterion   Criterion @relation(fields: [criterionId], references: [id], onDelete: Cascade)
+  note        String?
+  suggestedByAi Boolean @default(false)
+
+  @@unique([evidenceId, criterionId])
+}
+
+model SelfAssessmentReport {
+  id          String       @id @default(cuid())
+  cycleId     String
+  cycle       AccreditationCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  title       String
+  status      ReportStatus @default(DRAFT)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  sections    ReportSection[]
+}
+
+model ReportSection {
+  id              String              @id @default(cuid())
+  reportId        String
+  report          SelfAssessmentReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  standardId      String?
+  standard        Standard?           @relation(fields: [standardId], references: [id], onDelete: SetNull)
+  criterionId     String?
+  criterion       Criterion?          @relation(fields: [criterionId], references: [id], onDelete: SetNull)
+  title           String
+  content         String? // mô tả hiện trạng + phân tích
+  strengths       String?
+  weaknesses      String?
+  improvementPlan String?
+  status          ReportSectionStatus @default(NOT_STARTED)
+  order           Int                 @default(0)
+  assignedToId    String?
+  assignedTo      User?               @relation("SectionAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  reviewerId      String?
+  reviewer        User?               @relation("SectionReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  updatedAt       DateTime            @updatedAt
+}
+
+model ImprovementPlan {
+  id              String     @id @default(cuid())
+  programId       String
+  program         Program    @relation(fields: [programId], references: [id], onDelete: Cascade)
+  cycleId         String?
+  cycle           AccreditationCycle? @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+  criterionId     String?
+  criterion       Criterion? @relation(fields: [criterionId], references: [id], onDelete: SetNull)
+  problem         String
+  rootCause       String?
+  action          String?
+  responsibleUnit String?
+  kpi             String?
+  dueDate         DateTime?
+  status          PdcaStatus @default(PLAN)
+  source          String? // SAR / external review / survey
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+model Recommendation {
+  id              String     @id @default(cuid())
+  cycleId         String
+  cycle           AccreditationCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  criterionId     String?
+  criterion       Criterion? @relation(fields: [criterionId], references: [id], onDelete: SetNull)
+  content         String
+  priority        TaskPriority @default(MEDIUM)
+  responsibleUnit String?
+  dueDate         DateTime?
+  status          PdcaStatus @default(PLAN)
+  createdAt       DateTime   @default(now())
+}
+
+// ============================ SURVEYS ============================
+
+model Survey {
+  id          String         @id @default(cuid())
+  programId   String
+  program     Program        @relation(fields: [programId], references: [id], onDelete: Cascade)
+  title       String
+  audience    SurveyAudience
+  description String?
+  status      SurveyStatus   @default(DRAFT)
+  createdAt   DateTime       @default(now())
+  questions   SurveyQuestion[]
+  responses   SurveyResponse[]
+}
+
+model SurveyQuestion {
+  id       String       @id @default(cuid())
+  surveyId String
+  survey   Survey       @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  text     String
+  type     QuestionType @default(LIKERT)
+  order    Int          @default(0)
+  options  Json?
+  answers  SurveyAnswer[]
+}
+
+model SurveyResponse {
+  id          String   @id @default(cuid())
+  surveyId    String
+  survey      Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  respondent  String? // anonymised label
+  submittedAt DateTime @default(now())
+  answers     SurveyAnswer[]
+}
+
+model SurveyAnswer {
+  id          String         @id @default(cuid())
+  responseId  String
+  response    SurveyResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  questionId  String
+  question    SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  valueNumber Float?
+  valueText   String?
+}
+
+// ============================ OBE (outcome achievement) ============================
+
+model OutcomeAssessment {
+  id           String  @id @default(cuid())
+  programId    String
+  program      Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+  ploCode      String? // PLOx
+  cloCode      String?
+  courseCode   String?
+  cohort       String? // K2022
+  semester     String? // 2025-1
+  achievedRate Float // 0..100
+  threshold    Float   @default(70)
+  sampleSize   Int?
+  createdAt    DateTime @default(now())
+}
+
+// ============================ TASKS & PROGRESS ============================
+
+model Task {
+  id          String       @id @default(cuid())
+  programId   String?
+  program     Program?     @relation(fields: [programId], references: [id], onDelete: Cascade)
+  cycleId     String?
+  cycle       AccreditationCycle? @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+  criterionId String?
+  criterion   Criterion?   @relation(fields: [criterionId], references: [id], onDelete: SetNull)
+  title       String
+  description String?
+  status      TaskStatus   @default(TODO)
+  priority    TaskPriority @default(MEDIUM)
+  unit        String?
+  dueDate     DateTime?
+  assigneeId  String?
+  assignee    User?        @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  createdById String?
+  createdBy   User?        @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String?
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+// ============================ AI / RAG ============================
+
+model Document {
+  id            String   @id @default(cuid())
+  evidenceId    String?  @unique
+  evidence      Evidence? @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  programId     String?
+  program       Program? @relation(fields: [programId], references: [id], onDelete: SetNull)
+  fileName      String
+  fileType      String?
+  extractedText String?
+  summary       String?
+  language      String?
+  status        String   @default("READY")
+  createdAt     DateTime @default(now())
+  chunks        DocumentChunk[]
+}
+
+model DocumentChunk {
+  id           String   @id @default(cuid())
+  documentId   String
+  document     Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  chunkIndex   Int
+  content      String
+  tokenCount   Int?
+  pageNumber   Int?
+  sectionTitle String?
+  embedding    Float[] // stored as double precision[] (cosine similarity in app for MVP)
+  createdAt    DateTime @default(now())
+}
+
+model AiAnalysisResult {
+  id          String         @id @default(cuid())
+  type        AiAnalysisType
+  targetType  String? // "evidence" | "report_section" | "program" ...
+  targetId    String?
+  prompt      String?
+  result      String? // human-readable output
+  data        Json? // structured output
+  model       String?
+  usedFallback Boolean       @default(false)
+  accepted    Boolean? // human-in-the-loop decision
+  createdById String?
+  createdBy   User?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime       @default(now())
+}
+
+model AiChatSession {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  programId String?
+  program   Program? @relation(fields: [programId], references: [id], onDelete: SetNull)
+  title     String   @default("Phiên hỏi đáp")
+  createdAt DateTime @default(now())
+  messages  AiChatMessage[]
+}
+
+model AiChatMessage {
+  id        String   @id @default(cuid())
+  sessionId String
+  session   AiChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role      String // user | assistant
+  content   String
+  citations Json? // [{ evidenceId, title, snippet }]
+  createdAt DateTime @default(now())
+}
+
+// ============================ AUDIT & APPROVAL ============================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String // CREATE / UPDATE / DELETE / APPROVE / UPLOAD / AI_SUGGEST ...
+  entityType String
+  entityId   String?
+  detail     Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model ApprovalFlow {
+  id            String         @id @default(cuid())
+  entityType    String
+  entityId      String
+  requestedById String?
+  requestedBy   User?          @relation("ApprovalRequester", fields: [requestedById], references: [id], onDelete: SetNull)
+  approverId    String?
+  approver      User?          @relation("ApprovalApprover", fields: [approverId], references: [id], onDelete: SetNull)
+  status        ApprovalStatus @default(PENDING)
+  note          String?
+  createdAt     DateTime       @default(now())
+  decidedAt     DateTime?
+}
