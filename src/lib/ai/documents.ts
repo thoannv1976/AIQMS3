@@ -43,9 +43,38 @@ function detectLanguage(text: string): string {
   return viChars > text.length * 0.01 ? "vi" : "en";
 }
 
+/** Document processing lifecycle (stored as Document.status). */
+export const DOC_STATUS = { PENDING: "PENDING", PROCESSING: "PROCESSING", READY: "READY", FAILED: "FAILED" } as const;
+
+/** Create/flag a Document placeholder as PROCESSING so the UI reflects it immediately. */
+export async function markDocumentProcessing(opts: {
+  evidenceId: string;
+  programId?: string | null;
+  fileName: string;
+  fileType?: string | null;
+}): Promise<void> {
+  await prisma.document.upsert({
+    where: { evidenceId: opts.evidenceId },
+    update: { status: DOC_STATUS.PROCESSING },
+    create: {
+      evidenceId: opts.evidenceId,
+      programId: opts.programId ?? null,
+      fileName: opts.fileName,
+      fileType: opts.fileType ?? null,
+      status: DOC_STATUS.PROCESSING,
+    },
+  });
+}
+
+/** Flag a document as FAILED (called when background processing throws). */
+export async function markDocumentFailed(evidenceId: string): Promise<void> {
+  await prisma.document.updateMany({ where: { evidenceId }, data: { status: DOC_STATUS.FAILED } }).catch(() => {});
+}
+
 /**
  * Process an uploaded evidence file: extract text, chunk it, create embeddings,
- * and persist Document + DocumentChunk rows for the RAG layer.
+ * and persist Document + DocumentChunk rows for the RAG layer. Sets status READY
+ * only after chunks are written (so a crash mid-way leaves it non-READY).
  */
 export async function processEvidenceDocument(opts: {
   evidenceId: string;
@@ -58,7 +87,7 @@ export async function processEvidenceDocument(opts: {
 
   const document = await prisma.document.upsert({
     where: { evidenceId: opts.evidenceId },
-    update: { extractedText: text, language: detectLanguage(text), status: "READY" },
+    update: { extractedText: text, language: detectLanguage(text), status: DOC_STATUS.PROCESSING },
     create: {
       evidenceId: opts.evidenceId,
       programId: opts.programId ?? null,
@@ -66,7 +95,7 @@ export async function processEvidenceDocument(opts: {
       fileType: opts.fileType,
       extractedText: text,
       language: detectLanguage(text),
-      status: "READY",
+      status: DOC_STATUS.PROCESSING,
     },
   });
 
@@ -94,5 +123,6 @@ export async function processEvidenceDocument(opts: {
     }
   }
 
+  await prisma.document.update({ where: { id: document.id }, data: { status: DOC_STATUS.READY } });
   return { documentId: document.id, chunkCount: chunks.length, text };
 }

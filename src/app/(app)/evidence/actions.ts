@@ -2,12 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { can } from "@/lib/rbac";
+import { can, canInProgram } from "@/lib/rbac";
+import { programRolesOf } from "@/lib/program-context";
 import { logAudit } from "@/lib/audit";
 import { saveFile, buildEvidencePath, readFile } from "@/lib/storage";
-import { processEvidenceDocument } from "@/lib/ai/documents";
+import { processEvidenceDocument, markDocumentProcessing, markDocumentFailed } from "@/lib/ai/documents";
 import { summarizeText, suggestCriteria } from "@/lib/ai/features";
 import { EvidenceStatus, AiAnalysisType, Confidentiality } from "@/generated/prisma/enums";
 import type { Prisma } from "@/generated/prisma/client";
@@ -18,7 +20,6 @@ export interface FormState {
 
 export async function uploadEvidence(_prev: FormState, formData: FormData): Promise<FormState> {
   const user = await requireUser();
-  if (!can(user.role, "evidence:write")) return { error: "Bạn không có quyền tải minh chứng." };
 
   const programId = String(formData.get("programId") || "");
   const title = String(formData.get("title") || "").trim();
@@ -33,6 +34,10 @@ export async function uploadEvidence(_prev: FormState, formData: FormData): Prom
 
   const program = await prisma.program.findUnique({ where: { id: programId } });
   if (!program) return { error: "Chương trình không tồn tại." };
+
+  if (!canInProgram(user.role, await programRolesOf(user.id, programId), "evidence:write")) {
+    return { error: "Bạn không có quyền tải minh chứng cho chương trình này." };
+  }
 
   const dup = await prisma.evidence.findUnique({ where: { programId_code: { programId, code } } });
   if (dup) return { error: `Mã minh chứng "${code}" đã tồn tại trong chương trình.` };
@@ -84,13 +89,19 @@ export async function uploadEvidence(_prev: FormState, formData: FormData): Prom
 
   await logAudit({ userId: user.id, action: "UPLOAD", entityType: "Evidence", entityId: evidence.id, detail: { code } });
 
-  // Extract text + build RAG chunks (best-effort).
+  // Text extraction + RAG indexing runs in the background (after the response) so the
+  // upload returns immediately even for large files. UI shows the processing status.
   if (buffer && fileName) {
-    try {
-      await processEvidenceDocument({ evidenceId: evidence.id, programId, buffer, fileName, fileType: fileType ?? undefined });
-    } catch (e) {
-      console.error("[evidence] document processing failed:", e);
-    }
+    await markDocumentProcessing({ evidenceId: evidence.id, programId, fileName, fileType });
+    const job = { evidenceId: evidence.id, programId, buffer, fileName, fileType: fileType ?? undefined };
+    after(async () => {
+      try {
+        await processEvidenceDocument(job);
+      } catch (e) {
+        console.error("[evidence] background processing failed:", e);
+        await markDocumentFailed(job.evidenceId);
+      }
+    });
   }
 
   revalidatePath("/evidence");
@@ -99,25 +110,26 @@ export async function uploadEvidence(_prev: FormState, formData: FormData): Prom
 
 export async function reprocessEvidenceAction(evidenceId: string): Promise<void> {
   const user = await requireUser();
-  if (!can(user.role, "evidence:write")) return;
   const evidence = await prisma.evidence.findUnique({
     where: { id: evidenceId },
     select: { id: true, programId: true, storagePath: true, fileName: true, fileType: true },
   });
   if (!evidence?.storagePath || !evidence.fileName) return;
-  try {
-    const buffer = await readFile(evidence.storagePath);
-    await processEvidenceDocument({
-      evidenceId: evidence.id,
-      programId: evidence.programId,
-      buffer,
-      fileName: evidence.fileName,
-      fileType: evidence.fileType ?? undefined,
-    });
-    await logAudit({ userId: user.id, action: "REPROCESS", entityType: "Evidence", entityId: evidenceId });
-  } catch (e) {
-    console.error("[evidence] reprocess failed:", e);
-  }
+  if (!canInProgram(user.role, await programRolesOf(user.id, evidence.programId ?? ""), "evidence:write")) return;
+
+  await markDocumentProcessing({ evidenceId: evidence.id, programId: evidence.programId, fileName: evidence.fileName, fileType: evidence.fileType });
+  const storagePath = evidence.storagePath;
+  const job = { evidenceId: evidence.id, programId: evidence.programId, fileName: evidence.fileName, fileType: evidence.fileType ?? undefined };
+  after(async () => {
+    try {
+      const buffer = await readFile(storagePath);
+      await processEvidenceDocument({ ...job, buffer });
+    } catch (e) {
+      console.error("[evidence] reprocess failed:", e);
+      await markDocumentFailed(job.evidenceId);
+    }
+  });
+  await logAudit({ userId: user.id, action: "REPROCESS", entityType: "Evidence", entityId: evidenceId });
   revalidatePath(`/evidence/${evidenceId}`);
 }
 

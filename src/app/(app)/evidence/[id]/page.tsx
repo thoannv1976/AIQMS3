@@ -3,10 +3,11 @@ import { notFound } from "next/navigation";
 import { X, FileText, Download, RefreshCw } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { can } from "@/lib/rbac";
+import { canInProgram } from "@/lib/rbac";
+import { programRolesOf } from "@/lib/program-context";
 import { Card, CardContent, CardHeader, CardTitle, Badge, PageHeader, Select, Button } from "@/components/ui";
 import { DescItem } from "@/components/widgets";
-import { evidenceStatus, confidentiality as confMeta } from "@/lib/labels";
+import { evidenceStatus, confidentiality as confMeta, documentStatus } from "@/lib/labels";
 import { evidenceStrength, BAND_META } from "@/lib/quality/scoring";
 import { formatDate, formatBytes } from "@/lib/utils";
 import { AiPanel, StatusControl } from "./EvidenceActions";
@@ -35,8 +36,9 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
   const linkedIds = new Set(evidence.criterionLinks.map((l) => l.criterionId));
   const linkableCriteria = allCriteria.filter((c) => !linkedIds.has(c.id));
 
-  const canWrite = can(user.role, "evidence:write");
-  const canApprove = can(user.role, "evidence:approve");
+  const programRoles = await programRolesOf(user.id, evidence.programId);
+  const canWrite = canInProgram(user.role, programRoles, "evidence:write");
+  const canApprove = canInProgram(user.role, programRoles, "evidence:approve");
 
   const strength = evidenceStrength({
     status: evidence.status,
@@ -98,6 +100,18 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
                   )}
                 </DescItem>
                 <DescItem label="Phiên bản">{evidence.version}</DescItem>
+                {evidence.document && (
+                  <DescItem label="Trạng thái xử lý">
+                    <span className="inline-flex items-center gap-2">
+                      <Badge color={documentStatus(evidence.document.status).color}>
+                        {documentStatus(evidence.document.status).label}
+                      </Badge>
+                      {evidence.document.status === "READY" && (
+                        <span className="text-xs text-slate-400">{evidence.document._count.chunks} đoạn RAG</span>
+                      )}
+                    </span>
+                  </DescItem>
+                )}
                 <DescItem label="Độ mạnh minh chứng">
                   <span className="inline-flex items-center gap-2">
                     <Badge color={BAND_META[strength.band].color}>

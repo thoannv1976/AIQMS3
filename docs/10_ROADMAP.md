@@ -36,7 +36,7 @@ Báo cáo tiến độ/danh mục minh chứng; SAR; AI tóm tắt, gợi ý ti�
 ## Giai đoạn 6 — Hoàn thiện theo bản mô tả (đang triển khai)
 Bổ sung các mục còn thiếu/nâng cấp sau khi đối chiếu bản mô tả phần mềm:
 - ✅ **Vai trò theo phạm vi chương trình** (`UserProgramRole`): lọc chương trình theo phạm vi + nâng quyền cục bộ (`canInProgram`), UI gán/gỡ tại `/admin/users`.
-- ⬜ Xử lý tài liệu bất đồng bộ (async) — trạng thái `Document` PROCESSING/READY/FAILED.
+- ✅ **Xử lý tài liệu bất đồng bộ** (`after()`): upload trả về ngay, trích xuất + RAG chạy nền; `Document.status` PROCESSING/READY/FAILED hiển thị trên trang minh chứng.
 - ⬜ Lưu lịch sử chat AI (`AiChatSession/Message`).
 - ⬜ Xem nhiệm vụ dạng Gantt.
 - ⬜ Trung tâm thông báo (`Notification`).
