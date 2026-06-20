@@ -672,6 +672,15 @@ async function main() {
     skipDuplicates: true,
   });
 
+  // ---------------- Notifications (demo) ----------------
+  await prisma.notification.createMany({
+    data: [
+      { userId: byRole("ADMIN").id, title: "Chào mừng đến với AIQMS3", message: "Hệ thống quản lý ĐBCL & kiểm định chương trình đào tạo.", link: "/dashboard", read: true },
+      { userId: qa.id, title: "Có nhiệm vụ kiểm định sắp đến hạn", message: "Kiểm tra danh sách nhiệm vụ trong tuần này.", link: "/tasks" },
+      { userId: qa.id, title: "Minh chứng mới cần rà soát", message: "Một số minh chứng đang ở trạng thái chờ rà soát.", link: "/evidence" },
+    ],
+  });
+
   // ---------------- Audit log samples ----------------
   await prisma.auditLog.createMany({
     data: [

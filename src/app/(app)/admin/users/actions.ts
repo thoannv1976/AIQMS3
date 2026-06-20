@@ -6,6 +6,8 @@ import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { hashPassword } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import { createNotification } from "@/lib/notify";
+import { ROLE_LABELS } from "@/lib/rbac";
 import { Role } from "@/generated/prisma/enums";
 
 export interface FormState {
@@ -55,6 +57,14 @@ export async function assignProgramRoleAction(_prev: FormState, formData: FormDa
     entityType: "UserProgramRole",
     entityId: userId,
     detail: { programId, role },
+  });
+
+  const program = await prisma.program.findUnique({ where: { id: programId }, select: { code: true } });
+  await createNotification({
+    userId,
+    title: `Bạn được phân công vai trò ${ROLE_LABELS[role]}`,
+    message: program ? `Trong chương trình ${program.code}` : undefined,
+    link: `/programs/${programId}`,
   });
   revalidatePath("/admin/users");
   return { ok: true };

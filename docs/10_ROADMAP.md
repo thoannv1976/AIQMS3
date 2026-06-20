@@ -39,7 +39,7 @@ Bổ sung các mục còn thiếu/nâng cấp sau khi đối chiếu bản mô t
 - ✅ **Xử lý tài liệu bất đồng bộ** (`after()`): upload trả về ngay, trích xuất + RAG chạy nền; `Document.status` PROCESSING/READY/FAILED hiển thị trên trang minh chứng.
 - ✅ **Lưu lịch sử chat AI** (`AiChatSession/Message`): phiên hỏi đáp được lưu, sidebar lịch sử + mở lại/xóa phiên tại `/ai-assistant`.
 - ✅ **Xem nhiệm vụ dạng Gantt** (`/tasks?view=gantt`): dòng thời gian theo `startDate`→`dueDate`, mốc hôm nay, tô đỏ quá hạn; toggle Kanban/Gantt.
-- ⬜ Trung tâm thông báo (`Notification`).
+- ✅ **Trung tâm thông báo** (`Notification`): chuông + số chưa đọc trên topbar, dropdown + trang `/notifications`; tự sinh khi duyệt minh chứng / gán vai trò.
 - ⬜ Giao diện song ngữ Việt/Anh (i18n).
 - ⬜ (Tùy chọn) Quy trình phê duyệt đa bước cấu hình (`ApprovalFlow`).
 

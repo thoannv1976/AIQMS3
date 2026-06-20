@@ -9,6 +9,7 @@ import { can, canInProgram } from "@/lib/rbac";
 import { programRolesOf } from "@/lib/program-context";
 import { logAudit } from "@/lib/audit";
 import { saveFile, buildEvidencePath, readFile } from "@/lib/storage";
+import { createNotification } from "@/lib/notify";
 import { processEvidenceDocument, markDocumentProcessing, markDocumentFailed } from "@/lib/ai/documents";
 import { summarizeText, suggestCriteria } from "@/lib/ai/features";
 import { EvidenceStatus, AiAnalysisType, Confidentiality } from "@/generated/prisma/enums";
@@ -231,14 +232,25 @@ export async function setEvidenceStatusAction(evidenceId: string, status: Eviden
   if (isApproval && !can(user.role, "evidence:approve")) return;
   if (!isApproval && !can(user.role, "evidence:write")) return;
 
-  await prisma.evidence.update({
+  const ev = await prisma.evidence.update({
     where: { id: evidenceId },
     data: {
       status,
       approvedById: isApproval ? user.id : undefined,
       approvedAt: isApproval ? new Date() : undefined,
     },
+    select: { uploadedById: true, code: true, title: true },
   });
   await logAudit({ userId: user.id, action: isApproval ? "APPROVE" : "UPDATE_STATUS", entityType: "Evidence", entityId: evidenceId, detail: { status } });
+
+  // Notify the uploader when their evidence is approved or needs revision.
+  if ((isApproval || status === EvidenceStatus.NEEDS_REVISION) && ev.uploadedById && ev.uploadedById !== user.id) {
+    await createNotification({
+      userId: ev.uploadedById,
+      title: isApproval ? `Minh chứng ${ev.code} đã được duyệt` : `Minh chứng ${ev.code} cần bổ sung`,
+      message: ev.title,
+      link: `/evidence/${evidenceId}`,
+    });
+  }
   revalidatePath(`/evidence/${evidenceId}`);
 }

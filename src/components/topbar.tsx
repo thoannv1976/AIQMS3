@@ -1,12 +1,17 @@
 import { LogOut, Sparkles } from "lucide-react";
 import type { SessionUser } from "@/lib/auth";
+import { prisma } from "@/lib/db";
 import { roleLabel } from "@/lib/rbac";
 import { aiConfigured } from "@/lib/ai/client";
 import { logoutAction } from "@/lib/actions/session";
 import { initials } from "@/lib/utils";
+import { NotificationBell } from "./NotificationBell";
 
 export async function Topbar({ user }: { user: SessionUser }) {
-  const aiOn = await aiConfigured();
+  const [aiOn, notifications] = await Promise.all([
+    aiConfigured(),
+    prisma.notification.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 8 }),
+  ]);
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6">
       <div className="text-sm text-slate-500">
@@ -23,6 +28,17 @@ export async function Topbar({ user }: { user: SessionUser }) {
           <Sparkles className="h-3.5 w-3.5" />
           {aiOn ? "AI: Claude" : "AI: Dự phòng"}
         </span>
+
+        <NotificationBell
+          items={notifications.map((n) => ({
+            id: n.id,
+            title: n.title,
+            message: n.message,
+            link: n.link,
+            read: n.read,
+            createdAt: n.createdAt.toISOString(),
+          }))}
+        />
 
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-700">
