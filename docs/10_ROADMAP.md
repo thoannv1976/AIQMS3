@@ -24,10 +24,11 @@ Báo cáo tiến độ/danh mục minh chứng; SAR; AI tóm tắt, gợi ý ti�
 - ✅ **Khảo sát nâng cao** (trang `/surveys`, engine `lib/quality/surveys.ts`): so sánh hài lòng giữa các bên + xu hướng đa năm + AI phân tích phản hồi mở.
 - ✅ **PDCA nâng cao** (minh chứng trước/sau cải tiến tại `/improvements`) + **module giải trình đánh giá ngoài** (`/external-review`: ghi nhận khuyến nghị, AI soạn giải trình, theo dõi khắc phục).
 
-## Giai đoạn 5 — Pilot, Cloud Run & mở rộng
-- Pilot 1 chương trình với dữ liệu thật; deploy Cloud Run + Cloud SQL + Cloud Storage + Secret Manager.
-- Xuất báo cáo Word/PDF; benchmark nhiều chương trình; tích hợp LMS/Moodle/cổng đào tạo; SSO/Identity Platform.
-- Nâng RAG: embeddings provider thật + **pgvector / Vertex AI Vector Search**.
+## Giai đoạn 5 — Pilot, Cloud Run & mở rộng (đang triển khai)
+- 🟡 Pilot 1 chương trình với dữ liệu thật; deploy **Cloud Run + Cloud SQL + Cloud Storage + Secret Manager** *(Dockerfile/seed đã vá để build deploy sạch — đang chạy thử)*.
+- ✅ **Xuất báo cáo Word/PDF** (SAR tại `/reports/[id]`) + **danh mục minh chứng Excel** (`/evidence`).
+- ⬜ Benchmark nhiều chương trình; tích hợp LMS/Moodle/cổng đào tạo; SSO/Identity Platform.
+- ⬜ Nâng RAG: embeddings provider thật + **pgvector / Vertex AI Vector Search**.
 
 ## Gộp 3 giai đoạn chiến lược
 1. **Xây dựng MVP** (GĐ 0–3) — đã hoàn thành.

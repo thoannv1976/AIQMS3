@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, FileDown, Printer } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
@@ -42,7 +42,25 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ i
       <PageHeader
         title={report.title}
         description={`${report.cycle.program.code} · ${report.cycle.name}`}
-        actions={<Badge color={reportStatus[report.status].color}>{reportStatus[report.status].label}</Badge>}
+        actions={
+          <div className="flex items-center gap-2">
+            <a
+              href={`/reports/${report.id}/export?format=doc`}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              <FileDown className="h-4 w-4" /> Xuất Word
+            </a>
+            <a
+              href={`/reports/${report.id}/export?format=pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              <Printer className="h-4 w-4" /> Xuất PDF
+            </a>
+            <Badge color={reportStatus[report.status].color}>{reportStatus[report.status].label}</Badge>
+          </div>
+        }
       />
 
       <Card className="mb-6">

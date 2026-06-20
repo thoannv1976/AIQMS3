@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, FileText, Sparkles } from "lucide-react";
+import { Plus, FileText, Sparkles, FileSpreadsheet } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
@@ -30,6 +30,14 @@ export default async function EvidencePage({ searchParams }: { searchParams: Pro
         actions={
           <div className="flex items-center gap-3">
             <ProgramSwitcher programs={programs} selectedId={selected?.id} />
+            {selected && evidence.length > 0 && (
+              <a
+                href={`/evidence/export?program=${selected.id}`}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                <FileSpreadsheet className="h-4 w-4" /> Xuất Excel
+              </a>
+            )}
             {selected && can(user.role, "evidence:write") && (
               <LinkButton href={`/evidence/new?program=${selected.id}`}>
                 <Plus className="h-4 w-4" /> Tải minh chứng
