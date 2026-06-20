@@ -40,7 +40,7 @@ Bổ sung các mục còn thiếu/nâng cấp sau khi đối chiếu bản mô t
 - ✅ **Lưu lịch sử chat AI** (`AiChatSession/Message`): phiên hỏi đáp được lưu, sidebar lịch sử + mở lại/xóa phiên tại `/ai-assistant`.
 - ✅ **Xem nhiệm vụ dạng Gantt** (`/tasks?view=gantt`): dòng thời gian theo `startDate`→`dueDate`, mốc hôm nay, tô đỏ quá hạn; toggle Kanban/Gantt.
 - ✅ **Trung tâm thông báo** (`Notification`): chuông + số chưa đọc trên topbar, dropdown + trang `/notifications`; tự sinh khi duyệt minh chứng / gán vai trò.
-- ⬜ Giao diện song ngữ Việt/Anh (i18n).
+- ✅ **Giao diện song ngữ Việt/Anh** (i18n nhẹ `lib/i18n.ts`): bộ chuyển VI/EN trên topbar (cookie), dịch toàn bộ menu điều hướng + chrome; dữ liệu dùng `nameVi/nameEn`. Thân trang dịch dần (mở rộng được qua `t()`).
 - ⬜ (Tùy chọn) Quy trình phê duyệt đa bước cấu hình (`ApprovalFlow`).
 
 ## Gộp 3 giai đoạn chiến lược
