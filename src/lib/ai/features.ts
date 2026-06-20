@@ -1,6 +1,7 @@
 import { prisma } from "../db";
 import { aiComplete, type AiResult, type AiMeta } from "./client";
 import { cosineSimilarity, embedText, tokenize } from "./embeddings";
+import { pgVectorEnabled, searchSimilar } from "./vector";
 
 const SYSTEM_QA = `Bạn là trợ lý đảm bảo chất lượng và kiểm định chương trình đào tạo (AIQMS3).
 Nguyên tắc: chỉ hỗ trợ, gợi ý; con người kiểm tra và phê duyệt. Trả lời bằng tiếng Việt, học thuật, khách quan.
@@ -228,6 +229,21 @@ export interface RetrievedChunk {
 }
 
 export async function ragRetrieve(programId: string, question: string, k = 5): Promise<RetrievedChunk[]> {
+  const qv = embedText(question);
+
+  // Fast path: vector search in Postgres (pgvector) — scales to very large corpora.
+  if (pgVectorEnabled()) {
+    try {
+      const hits = await searchSimilar(programId, qv, k);
+      const filtered = hits.filter((c) => c.score > 0.02);
+      if (filtered.length) return filtered;
+      // Empty (e.g. vectors not backfilled yet) → fall through to the in-app path.
+    } catch (err) {
+      console.error("[rag] pgvector search failed, using in-app cosine fallback:", err);
+    }
+  }
+
+  // Fallback: in-app cosine over the Float[] embeddings (works without pgvector).
   const chunks = await prisma.documentChunk.findMany({
     where: { document: { programId } },
     select: {
@@ -237,7 +253,6 @@ export async function ragRetrieve(programId: string, question: string, k = 5): P
     },
     take: 800,
   });
-  const qv = embedText(question);
   return chunks
     .map((c) => ({
       content: c.content,

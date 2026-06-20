@@ -30,7 +30,8 @@ Báo cáo tiến độ/danh mục minh chứng; SAR; AI tóm tắt, gợi ý ti�
 - ✅ **Xuất báo cáo Word/PDF** (SAR) + **danh mục minh chứng Excel**.
 - ✅ **Benchmark nhiều chương trình** (`/benchmark`: đối sánh readiness/AUN/OBE/độ mạnh MC).
 - ⬜ Tích hợp LMS/Moodle/cổng đào tạo; SSO/Identity Platform.
-- ⬜ Nâng RAG: embeddings provider thật + **pgvector / Vertex AI Vector Search**.
+- ✅ **Nâng RAG bằng pgvector** (`lib/ai/vector.ts`: tìm kiếm vector trong Postgres, chỉ mục HNSW cosine, fallback cosine trong app; bật bằng `RAG_DRIVER=pgvector` + `npm run rag:pgvector`).
+- 🟡 Embeddings provider thật (Vertex AI / Voyage) thay `embedText` heuristic — còn lại.
 
 ## Gộp 3 giai đoạn chiến lược
 1. **Xây dựng MVP** (GĐ 0–3) — đã hoàn thành.

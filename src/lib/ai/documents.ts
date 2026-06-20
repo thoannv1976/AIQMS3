@@ -1,5 +1,6 @@
 import { prisma } from "../db";
 import { chunkText, embedText } from "./embeddings";
+import { indexDocumentVectors, pgVectorEnabled } from "./vector";
 
 // Extract plain text from common evidence file types. All parsers are dynamically
 // imported so they only load on the server when actually needed.
@@ -83,6 +84,14 @@ export async function processEvidenceDocument(opts: {
         embedding: embedText(content),
       })),
     });
+    // Mirror into the pgvector column for fast search (no-op if pgvector is off).
+    if (pgVectorEnabled()) {
+      try {
+        await indexDocumentVectors(document.id);
+      } catch (err) {
+        console.error("[documents] pgvector index sync failed:", err);
+      }
+    }
   }
 
   return { documentId: document.id, chunkCount: chunks.length, text };

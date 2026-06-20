@@ -80,6 +80,17 @@ GCS_PROJECT_ID=your-project
 - Khi khối lượng lớn: tách phần xử lý sang **worker bất đồng bộ** (Cloud Tasks/Pub-Sub) — upload chỉ lưu tệp + đẩy message; worker gọi `processEvidenceDocument`. Nút "Xử lý lại" và trường `Document.status` đã sẵn cho mô hình này.
 - Nâng RAG: thay embeddings cục bộ bằng provider thật + **pgvector / Vertex AI Vector Search** (GĐ5).
 
+## RAG ở quy mô lớn (pgvector)
+Mặc định RAG tính cosine trong app trên `DocumentChunk.embedding` (Float[256]) — chạy mọi nơi nhưng O(n). Khi minh chứng rất nhiều, bật **pgvector** để tìm kiếm vector trong CSDL có chỉ mục ANN:
+```
+RAG_DRIVER=pgvector
+```
+1. Cloud SQL: bật extension `vector` (Cloud SQL hỗ trợ pgvector).
+2. Chạy một lần: `npm run rag:pgvector` — tạo `CREATE EXTENSION vector`, cột `embedding_vec vector(256)`, **chỉ mục HNSW (cosine)** và backfill từ embeddings hiện có.
+3. Từ đó, mỗi minh chứng mới tự đồng bộ vector; truy hồi RAG dùng `embedding_vec <=> query` (ANN). Nếu pgvector lỗi/chưa backfill, app **tự fallback** về cosine trong app.
+
+Cột `embedding_vec` quản lý ngoài Prisma (không trong migration) để môi trường không có pgvector không bị chặn; production dùng `prisma migrate deploy` (không kiểm tra drift). Nâng cấp tiếp: thay `embedText` heuristic bằng embeddings thật (Vertex AI / Voyage) — chỉ cần đổi `EMBEDDING_DIM` + cột `vector(N)`.
+
 ## Sao lưu & bảo mật
 - Cloud SQL: bật **automated backup** + **PITR**.
 - Bí mật: **Secret Manager** (không commit `.env`).
