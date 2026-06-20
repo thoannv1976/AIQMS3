@@ -36,6 +36,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/tasks", label: "Nhiệm vụ & tiến độ", icon: "task", capability: "task:view" },
       { href: "/reports", label: "Báo cáo tự đánh giá", icon: "report", capability: "report:view" },
       { href: "/improvements", label: "Cải tiến (PDCA)", icon: "improvement", capability: "improvement:view" },
+      { href: "/external-review", label: "Đánh giá ngoài & giải trình", icon: "external", capability: "improvement:view" },
     ],
   },
   {

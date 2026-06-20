@@ -518,6 +518,33 @@ async function main() {
     ],
   });
 
+  // ---------------- External-review recommendations ----------------
+  await prisma.recommendation.createMany({
+    data: [
+      {
+        cycleId: cycle.id, criterionId: critByCode("2.1").id, assessor: "AUN-QA",
+        content: "Làm rõ sự tương thích (constructive alignment) giữa CLO, phương pháp dạy-học và đánh giá ở các học phần cốt lõi.",
+        priority: "HIGH", responsibleUnit: "Bộ môn HTTT", status: "PLAN",
+        dueDate: new Date(Date.now() + 100 * day),
+      },
+      {
+        cycleId: cycle.id, criterionId: critByCode("8.2").id, assessor: "AUN-QA",
+        content: "Bổ sung minh chứng phản hồi của nhà tuyển dụng và tỷ lệ việc làm của người tốt nghiệp.",
+        priority: "MEDIUM", responsibleUnit: "Phòng CTSV", status: "DO",
+        response:
+          "Đơn vị tiếp thu khuyến nghị. Đã xây dựng kế hoạch khảo sát nhà tuyển dụng và cựu sinh viên trong học kỳ tới; kết quả và biên bản sẽ được bổ sung vào hồ sơ minh chứng tiêu chí 8.2.",
+        respondedAt: new Date(Date.now() - 10 * day),
+        dueDate: new Date(Date.now() + 60 * day),
+      },
+      {
+        cycleId: cycle.id, criterionId: critByCode("4.2").id, assessor: "AUN-QA",
+        content: "Chuẩn hóa rubric đánh giá và công bố công khai tiêu chí chấm cho người học.",
+        priority: "MEDIUM", responsibleUnit: "Bộ môn HTTT", status: "PLAN",
+        dueDate: new Date(Date.now() + 80 * day),
+      },
+    ],
+  });
+
   // ---------------- Audit log samples ----------------
   await prisma.auditLog.createMany({
     data: [

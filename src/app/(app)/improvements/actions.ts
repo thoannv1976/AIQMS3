@@ -7,7 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { logAudit } from "@/lib/audit";
 import { suggestImprovements } from "@/lib/ai/features";
-import { PdcaStatus, AiAnalysisType } from "@/generated/prisma/enums";
+import { PdcaStatus, AiAnalysisType, ImprovementPhase } from "@/generated/prisma/enums";
 
 export interface FormState {
   error?: string;
@@ -45,6 +45,34 @@ export async function updateImprovementStatusAction(id: string, status: PdcaStat
   if (!can(user.role, "improvement:write")) return;
   await prisma.improvementPlan.update({ where: { id }, data: { status } });
   await logAudit({ userId: user.id, action: "UPDATE_STATUS", entityType: "ImprovementPlan", entityId: id, detail: { status } });
+  revalidatePath("/improvements");
+}
+
+export async function linkImprovementEvidenceAction(improvementId: string, formData: FormData): Promise<void> {
+  const user = await requireUser();
+  if (!can(user.role, "improvement:write")) return;
+  const evidenceId = String(formData.get("evidenceId") || "");
+  const phase = String(formData.get("phase") || "") as ImprovementPhase;
+  if (!evidenceId || (phase !== ImprovementPhase.BEFORE && phase !== ImprovementPhase.AFTER)) return;
+  await prisma.improvementEvidenceLink.upsert({
+    where: { improvementId_evidenceId_phase: { improvementId, evidenceId, phase } },
+    update: {},
+    create: { improvementId, evidenceId, phase },
+  });
+  await logAudit({
+    userId: user.id,
+    action: "LINK_IMPROVEMENT_EVIDENCE",
+    entityType: "ImprovementPlan",
+    entityId: improvementId,
+    detail: { evidenceId, phase },
+  });
+  revalidatePath("/improvements");
+}
+
+export async function unlinkImprovementEvidenceAction(linkId: string): Promise<void> {
+  const user = await requireUser();
+  if (!can(user.role, "improvement:write")) return;
+  await prisma.improvementEvidenceLink.deleteMany({ where: { id: linkId } });
   revalidatePath("/improvements");
 }
 

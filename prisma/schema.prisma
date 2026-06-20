@@ -149,6 +149,11 @@ enum ApprovalStatus {
   REJECTED
 }
 
+enum ImprovementPhase {
+  BEFORE // minh chứng hiện trạng trước cải tiến
+  AFTER // minh chứng kết quả sau cải tiến
+}
+
 enum AiAnalysisType {
   SUMMARY
   CRITERION_SUGGESTION
@@ -477,6 +482,7 @@ model Evidence {
   updatedAt       DateTime        @updatedAt
 
   criterionLinks EvidenceCriterionLink[]
+  improvementLinks ImprovementEvidenceLink[]
   document       Document?
 
   @@unique([programId, code])
@@ -545,6 +551,23 @@ model ImprovementPlan {
   source          String? // SAR / external review / survey
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
+
+  evidenceLinks   ImprovementEvidenceLink[]
+  recommendations Recommendation[]
+}
+
+// Before/after evidence attached to an improvement plan (closed-loop PDCA).
+model ImprovementEvidenceLink {
+  id            String           @id @default(cuid())
+  improvementId String
+  improvement   ImprovementPlan  @relation(fields: [improvementId], references: [id], onDelete: Cascade)
+  evidenceId    String
+  evidence      Evidence         @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  phase         ImprovementPhase
+  note          String?
+  createdAt     DateTime         @default(now())
+
+  @@unique([improvementId, evidenceId, phase])
 }
 
 model Recommendation {
@@ -558,6 +581,12 @@ model Recommendation {
   responsibleUnit String?
   dueDate         DateTime?
   status          PdcaStatus @default(PLAN)
+  // External-review handling: institutional explanation/response + linked corrective plan.
+  assessor        String? // tổ chức/đoàn đánh giá ngoài
+  response        String? // nội dung giải trình của đơn vị
+  respondedAt     DateTime?
+  improvementPlanId String?
+  improvementPlan ImprovementPlan? @relation(fields: [improvementPlanId], references: [id], onDelete: SetNull)
   createdAt       DateTime   @default(now())
 }
 

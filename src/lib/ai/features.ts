@@ -447,3 +447,28 @@ Hãy đánh giá: (1) tính đầy đủ của đề cương; (2) sự tương t
         : "Đề cương cơ bản đầy đủ. Nên kiểm tra động từ Bloom của CLO và đối sánh CLO ↔ phương pháp đánh giá."),
   });
 }
+
+// ---------------------------------------------------------------------------
+// 12. Draft an institutional response to an external-review recommendation
+// ---------------------------------------------------------------------------
+export async function draftRecommendationResponse(
+  input: { content: string; criterionTitle?: string | null; priority?: string },
+  meta?: AiMeta,
+): Promise<AiResult> {
+  return aiComplete({
+    feature: "external_response",
+    userId: meta?.userId,
+    system: SYSTEM_QA,
+    maxTokens: 700,
+    prompt: `Soạn nội dung GIẢI TRÌNH của đơn vị đối với khuyến nghị từ đoàn đánh giá ngoài.
+Khuyến nghị: "${input.content}".${input.criterionTitle ? ` Liên quan tiêu chí: ${input.criterionTitle}.` : ""}${input.priority ? ` Mức ưu tiên: ${input.priority}.` : ""}
+
+Cấu trúc giải trình: (1) tiếp thu/làm rõ khuyến nghị; (2) hiện trạng và nguyên nhân; (3) hành động khắc phục theo PDCA (việc cụ thể, đơn vị phụ trách); (4) mốc thời gian và minh chứng sẽ bổ sung. Văn phong trang trọng, khách quan.`,
+    fallback: () =>
+      `Giải trình (bản nháp quy tắc — chưa bật AI):\n` +
+      `1. Đơn vị tiếp thu khuyến nghị: "${input.content}".\n` +
+      `2. Hiện trạng: cần rà soát và bổ sung minh chứng liên quan.\n` +
+      `3. Hành động khắc phục: xây dựng kế hoạch cải tiến PDCA, phân công đơn vị phụ trách.\n` +
+      `4. Mốc thời gian: hoàn thành trong học kỳ tới; bổ sung minh chứng sau cải tiến.`,
+  });
+}

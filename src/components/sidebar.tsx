@@ -20,6 +20,7 @@ import {
   KeyRound,
   Gauge,
   Workflow,
+  Gavel,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,7 @@ const ICONS: Record<string, LucideIcon> = {
   aiconfig: KeyRound,
   readiness: Gauge,
   curriculum: Workflow,
+  external: Gavel,
 };
 
 export function Sidebar({ groups }: { groups: NavGroup[] }) {

@@ -55,6 +55,7 @@ export const FEATURE_LABELS: Record<string, string> = {
   matrix_check: "Rà soát ma trận PLO",
   gap_analysis: "Phân tích khoảng trống",
   curriculum_check: "Kiểm tra logic CTĐT",
+  external_response: "Soạn giải trình đánh giá ngoài",
   connection_test: "Kiểm tra kết nối",
   other: "Khác",
 };
