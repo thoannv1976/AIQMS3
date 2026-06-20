@@ -51,6 +51,8 @@ export const FEATURE_LABELS: Record<string, string> = {
   improvement_suggestion: "Đề xuất cải tiến (PDCA)",
   rag_chat: "Trợ lý AI (RAG)",
   matrix_check: "Rà soát ma trận PLO",
+  gap_analysis: "Phân tích khoảng trống",
+  curriculum_check: "Kiểm tra logic CTĐT",
   connection_test: "Kiểm tra kết nối",
   other: "Khác",
 };

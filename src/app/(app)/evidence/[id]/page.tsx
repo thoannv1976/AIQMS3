@@ -7,6 +7,7 @@ import { can } from "@/lib/rbac";
 import { Card, CardContent, CardHeader, CardTitle, Badge, PageHeader, Select, Button } from "@/components/ui";
 import { DescItem } from "@/components/widgets";
 import { evidenceStatus, confidentiality as confMeta } from "@/lib/labels";
+import { evidenceStrength, BAND_META } from "@/lib/quality/scoring";
 import { formatDate, formatBytes } from "@/lib/utils";
 import { AiPanel, StatusControl } from "./EvidenceActions";
 import { unlinkCriterionAction, linkCriterionForm } from "../actions";
@@ -36,6 +37,14 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
 
   const canWrite = can(user.role, "evidence:write");
   const canApprove = can(user.role, "evidence:approve");
+
+  const strength = evidenceStrength({
+    status: evidence.status,
+    hasFile: Boolean(evidence.storagePath),
+    isMachineReadable: (evidence.document?._count.chunks ?? 0) > 0,
+    hasSummary: Boolean(evidence.document?.summary),
+    criterionLinkCount: evidence.criterionLinks.length,
+  });
 
   return (
     <div>
@@ -68,6 +77,16 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
                   )}
                 </DescItem>
                 <DescItem label="Phiên bản">{evidence.version}</DescItem>
+                <DescItem label="Độ mạnh minh chứng">
+                  <span className="inline-flex items-center gap-2">
+                    <Badge color={BAND_META[strength.band].color}>
+                      {strength.score}/100 · {BAND_META[strength.band].label}
+                    </Badge>
+                  </span>
+                  {strength.reasons.length > 0 && (
+                    <span className="mt-1 block text-xs text-amber-700">{strength.reasons[0]}</span>
+                  )}
+                </DescItem>
                 <DescItem label="Người tải lên">{evidence.uploadedBy?.fullName ?? "—"}</DescItem>
                 <DescItem label="Người duyệt">
                   {evidence.approvedBy ? `${evidence.approvedBy.fullName} · ${formatDate(evidence.approvedAt)}` : "—"}

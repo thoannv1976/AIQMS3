@@ -18,6 +18,8 @@ import {
   Settings,
   Sparkles,
   KeyRound,
+  Gauge,
+  Workflow,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -39,6 +41,8 @@ const ICONS: Record<string, LucideIcon> = {
   audit: ScrollText,
   admin: Settings,
   aiconfig: KeyRound,
+  readiness: Gauge,
+  curriculum: Workflow,
 };
 
 export function Sidebar({ groups }: { groups: NavGroup[] }) {

@@ -276,3 +276,86 @@ export async function ragAnswer(
 
   return { ...result, citations: top };
 }
+
+// ---------------------------------------------------------------------------
+// 8. Gap analysis for a single accreditation criterion
+// ---------------------------------------------------------------------------
+export async function analyzeCriterionGap(
+  input: {
+    criterionCode: string;
+    criterionTitle: string;
+    readinessScore: number;
+    sarStatusLabel: string;
+    evidence: Array<{ code: string; title: string; statusLabel: string; strength: number }>;
+    detectedGaps: string[];
+  },
+  meta?: AiMeta,
+): Promise<AiResult> {
+  const evidenceList = input.evidence.length
+    ? input.evidence.map((e) => `- ${e.code} ${e.title} (trạng thái: ${e.statusLabel}, độ mạnh ${e.strength}/100)`).join("\n")
+    : "(Chưa có minh chứng nào được liên kết.)";
+
+  return aiComplete({
+    feature: "gap_analysis",
+    userId: meta?.userId,
+    system: SYSTEM_QA,
+    maxTokens: 800,
+    prompt: `Phân tích khoảng trống minh chứng (gap analysis) cho tiêu chí kiểm định ${input.criterionCode} — "${input.criterionTitle}".
+Mức sẵn sàng hiện tại: ${input.readinessScore}/100. Tình trạng mục SAR: ${input.sarStatusLabel}.
+
+Minh chứng hiện có:
+${evidenceList}
+
+Khoảng trống tự động phát hiện:
+${input.detectedGaps.length ? input.detectedGaps.map((g) => `- ${g}`).join("\n") : "- (không có)"}
+
+Hãy trình bày: (1) minh chứng hiện đáp ứng được phần nào của tiêu chí; (2) những minh chứng/dữ liệu còn THIẾU theo yêu cầu AUN-QA; (3) đề xuất danh mục minh chứng cụ thể cần bổ sung (loại tài liệu, đơn vị cung cấp); (4) mức ưu tiên (cao/trung bình/thấp).`,
+    fallback: () =>
+      `Phân tích khoảng trống tiêu chí ${input.criterionCode} (chưa bật AI) — mức sẵn sàng ${input.readinessScore}/100.\n` +
+      (input.detectedGaps.length
+        ? "Cần xử lý:\n" + input.detectedGaps.map((g) => `• ${g}`).join("\n")
+        : "Không phát hiện khoảng trống rõ ràng theo quy tắc cơ bản.") +
+      `\nGợi ý: bổ sung minh chứng định lượng, biên bản/quyết định, và minh chứng cho thấy chu trình cải tiến (PDCA) cho tiêu chí này.`,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 9. Review curriculum coherence (PLO–CLO–Assessment–Rubric)
+// ---------------------------------------------------------------------------
+export async function reviewCurriculumLogic(
+  input: {
+    ploCount: number;
+    cloCount: number;
+    courseCount: number;
+    coverage: Record<string, number>;
+    issues: Array<{ severity: string; message: string }>;
+  },
+  meta?: AiMeta,
+): Promise<AiResult> {
+  const issueList = input.issues.length
+    ? input.issues.map((i) => `- [${i.severity}] ${i.message}`).join("\n")
+    : "(không phát hiện vấn đề tự động)";
+
+  return aiComplete({
+    feature: "curriculum_check",
+    userId: meta?.userId,
+    system: SYSTEM_QA,
+    maxTokens: 900,
+    prompt: `Rà soát tính nhất quán của chương trình đào tạo theo chuỗi PLO → CLO → Phương pháp đánh giá → Rubric (OBE/Constructive Alignment).
+Quy mô: ${input.ploCount} PLO, ${input.courseCount} học phần, ${input.cloCount} CLO.
+Độ phủ (%): ${Object.entries(input.coverage).map(([k, v]) => `${k}=${v}`).join(", ")}.
+
+Vấn đề tự động phát hiện:
+${issueList}
+
+Hãy nhận định: (1) mức độ "constructive alignment" của chương trình; (2) các rủi ro lớn nhất về tính nhất quán; (3) 3–5 hành động khắc phục ưu tiên, gắn với đơn vị phụ trách.`,
+    fallback: () =>
+      input.issues.length
+        ? `Rà soát logic CTĐT (chưa bật AI) — phát hiện ${input.issues.length} vấn đề:\n` +
+          input.issues
+            .slice(0, 12)
+            .map((i) => `• [${i.severity}] ${i.message}`)
+            .join("\n")
+        : "Chuỗi PLO–CLO–Assessment–Rubric về cơ bản nhất quán theo các quy tắc kiểm tra tự động. Vẫn nên có rà soát chuyên môn của hội đồng.",
+  });
+}
