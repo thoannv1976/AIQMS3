@@ -50,6 +50,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/audit", label: "Nhật ký hệ thống", icon: "audit", capability: "audit:view" },
       { href: "/admin/users", label: "Quản trị người dùng", icon: "admin", capability: "admin:users" },
+      { href: "/admin/ai-config", label: "Cấu hình AI", icon: "aiconfig", capability: "admin:settings" },
     ],
   },
 ];

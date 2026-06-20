@@ -72,7 +72,7 @@ export async function draftSectionAction(sectionId: string): Promise<{ text: str
     criterionCode: ctx.section.criterion?.code,
     criterionTitle: ctx.section.criterion?.title ?? ctx.section.title,
     evidenceSummaries: ctx.evidenceSummaries,
-  });
+  }, { userId: user.id });
 
   await prisma.aiAnalysisResult.create({
     data: {
@@ -101,7 +101,7 @@ export async function reviewSectionAction(sectionId: string): Promise<{ text: st
     weaknesses: ctx.section.weaknesses,
     improvementPlan: ctx.section.improvementPlan,
     linkedEvidenceCount: ctx.linkedEvidenceCount,
-  });
+  }, { userId: user.id });
 
   await prisma.aiAnalysisResult.create({
     data: {

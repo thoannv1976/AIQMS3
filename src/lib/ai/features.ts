@@ -1,5 +1,5 @@
 import { prisma } from "../db";
-import { aiComplete, type AiResult } from "./client";
+import { aiComplete, type AiResult, type AiMeta } from "./client";
 import { cosineSimilarity, embedText, tokenize } from "./embeddings";
 
 const SYSTEM_QA = `Bạn là trợ lý đảm bảo chất lượng và kiểm định chương trình đào tạo (AIQMS3).
@@ -21,9 +21,11 @@ function heuristicSummary(text: string, maxSentences = 4): string {
 // ---------------------------------------------------------------------------
 // 1. Summarise a document / evidence
 // ---------------------------------------------------------------------------
-export async function summarizeText(text: string, label?: string): Promise<AiResult> {
+export async function summarizeText(text: string, label?: string, meta?: AiMeta): Promise<AiResult> {
   const content = truncate(text || "", 12000);
   return aiComplete({
+    feature: "evidence_summary",
+    userId: meta?.userId,
     system: SYSTEM_QA,
     maxTokens: 600,
     prompt: `Tóm tắt ngắn gọn (3-5 câu) nội dung minh chứng sau${label ? ` ("${label}")` : ""}, nêu rõ loại tài liệu, nội dung chính và giá trị phục vụ kiểm định:\n\n${content}`,
@@ -51,6 +53,7 @@ export interface CriterionSuggestion {
 export async function suggestCriteria(
   text: string,
   criteria: CriterionLite[],
+  meta?: AiMeta,
 ): Promise<AiResult & { data: CriterionSuggestion[] }> {
   // Always compute a heuristic ranking (also used as fallback / cross-check).
   const textTokens = new Set(tokenize(text));
@@ -67,6 +70,8 @@ export async function suggestCriteria(
 
   const list = criteria.map((c) => `${c.code}: ${c.title}`).join("\n");
   const result = await aiComplete({
+    feature: "criterion_suggestion",
+    userId: meta?.userId,
     system: SYSTEM_QA,
     maxTokens: 500,
     prompt: `Dưới đây là danh mục tiêu chí kiểm định:\n${list}\n\nNội dung minh chứng:\n${truncate(text, 6000)}\n\nHãy gợi ý 3-5 tiêu chí phù hợp nhất (theo mã), kèm lý do ngắn gọn cho từng tiêu chí.`,
@@ -88,12 +93,14 @@ export async function draftReportSection(input: {
   criterionTitle: string;
   evidenceSummaries: string[];
   notes?: string;
-}): Promise<AiResult> {
+}, meta?: AiMeta): Promise<AiResult> {
   const evidence = input.evidenceSummaries.length
     ? input.evidenceSummaries.map((e, i) => `[MC${i + 1}] ${e}`).join("\n")
     : "(Chưa có minh chứng được liên kết.)";
 
   return aiComplete({
+    feature: "sar_draft",
+    userId: meta?.userId,
     system: SYSTEM_QA,
     maxTokens: 1500,
     prompt: `Soạn bản nháp nội dung báo cáo tự đánh giá cho tiêu chí ${input.criterionCode ?? ""} "${input.criterionTitle}".
@@ -120,7 +127,7 @@ export async function reviewReportSection(input: {
   weaknesses?: string | null;
   improvementPlan?: string | null;
   linkedEvidenceCount: number;
-}): Promise<AiResult> {
+}, meta?: AiMeta): Promise<AiResult> {
   const issuesFallback: string[] = [];
   if (!input.content || input.content.trim().length < 80) issuesFallback.push("Phần mô tả/phân tích còn quá ngắn hoặc trống.");
   if (input.linkedEvidenceCount === 0) issuesFallback.push("Chưa có minh chứng được liên kết với tiêu chí này.");
@@ -130,6 +137,8 @@ export async function reviewReportSection(input: {
   if (input.content && !/\d/.test(input.content)) issuesFallback.push("Nội dung chưa có số liệu định lượng cụ thể.");
 
   return aiComplete({
+    feature: "sar_review",
+    userId: meta?.userId,
     system: SYSTEM_QA,
     maxTokens: 800,
     prompt: `Rà soát chất lượng phần báo cáo tự đánh giá "${input.title}" và liệt kê các vấn đề (mỗi vấn đề một dòng), tập trung: nội dung chung chung, nhận định thiếu minh chứng/số liệu, thiếu điểm mạnh/tồn tại/kế hoạch cải tiến, mâu thuẫn.
@@ -156,9 +165,11 @@ export async function analyzeSurvey(input: {
   audience: string;
   openAnswers: string[];
   averageScore?: number | null;
-}): Promise<AiResult> {
+}, meta?: AiMeta): Promise<AiResult> {
   const answers = input.openAnswers.filter(Boolean);
   return aiComplete({
+    feature: "survey_analysis",
+    userId: meta?.userId,
     system: SYSTEM_QA,
     maxTokens: 900,
     prompt: `Phân tích phản hồi khảo sát "${input.title}" (đối tượng: ${input.audience}).
@@ -186,8 +197,10 @@ export async function suggestImprovements(input: {
   problem: string;
   criterionTitle?: string;
   context?: string;
-}): Promise<AiResult> {
+}, meta?: AiMeta): Promise<AiResult> {
   return aiComplete({
+    feature: "improvement_suggestion",
+    userId: meta?.userId,
     system: SYSTEM_QA,
     maxTokens: 700,
     prompt: `Vấn đề/tồn tại: "${input.problem}".${input.criterionTitle ? ` Liên quan tiêu chí: ${input.criterionTitle}.` : ""}
@@ -241,6 +254,7 @@ export async function ragRetrieve(programId: string, question: string, k = 5): P
 export async function ragAnswer(
   programId: string,
   question: string,
+  meta?: AiMeta,
 ): Promise<AiResult & { citations: RetrievedChunk[] }> {
   const top = await ragRetrieve(programId, question, 5);
   const context = top
@@ -248,6 +262,8 @@ export async function ragAnswer(
     .join("\n\n");
 
   const result = await aiComplete({
+    feature: "rag_chat",
+    userId: meta?.userId,
     system: SYSTEM_QA,
     maxTokens: 900,
     prompt: `Câu hỏi: ${question}\n\nNgữ cảnh từ kho minh chứng của chương trình:\n${context || "(không tìm thấy minh chứng liên quan)"}\n\nTrả lời dựa trên ngữ cảnh, trích dẫn số [n] tương ứng. Nếu ngữ cảnh không đủ, hãy nói rõ minh chứng còn thiếu.`,

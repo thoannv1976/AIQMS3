@@ -17,6 +17,7 @@ import {
   ScrollText,
   Settings,
   Sparkles,
+  KeyRound,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -37,6 +38,7 @@ const ICONS: Record<string, LucideIcon> = {
   obe: BarChart3,
   audit: ScrollText,
   admin: Settings,
+  aiconfig: KeyRound,
 };
 
 export function Sidebar({ groups }: { groups: NavGroup[] }) {

@@ -51,7 +51,7 @@ export async function updateImprovementStatusAction(id: string, status: PdcaStat
 export async function suggestImprovementAction(problem: string, criterionTitle?: string): Promise<{ text: string; usedFallback: boolean }> {
   const user = await requireUser();
   if (!problem.trim()) return { text: "Hãy nhập vấn đề cần cải tiến trước.", usedFallback: true };
-  const res = await suggestImprovements({ problem, criterionTitle });
+  const res = await suggestImprovements({ problem, criterionTitle }, { userId: user.id });
   await prisma.aiAnalysisResult.create({
     data: { type: AiAnalysisType.IMPROVEMENT_SUGGESTION, targetType: "improvement", result: res.text, model: res.model, usedFallback: res.usedFallback, createdById: user.id },
   });

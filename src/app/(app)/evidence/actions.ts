@@ -103,7 +103,7 @@ export async function summarizeEvidenceAction(evidenceId: string): Promise<{ tex
   if (!evidence) return { text: "Không tìm thấy minh chứng.", usedFallback: true };
 
   const text = evidence.document?.extractedText || evidence.description || evidence.title;
-  const res = await summarizeText(text, evidence.title);
+  const res = await summarizeText(text, evidence.title, { userId: user.id });
 
   await prisma.aiAnalysisResult.create({
     data: {
@@ -143,7 +143,11 @@ export async function suggestCriteriaAction(
 
   const criteria = cycle ? cycle.standardSet.standards.flatMap((s) => s.criteria) : [];
   const text = evidence.document?.extractedText || evidence.description || evidence.title;
-  const res = await suggestCriteria(text, criteria.map((c) => ({ id: c.id, code: c.code, title: c.title, description: c.description })));
+  const res = await suggestCriteria(
+    text,
+    criteria.map((c) => ({ id: c.id, code: c.code, title: c.title, description: c.description })),
+    { userId: user.id },
+  );
 
   await prisma.aiAnalysisResult.create({
     data: {

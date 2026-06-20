@@ -15,7 +15,7 @@ export async function askAction(programId: string, question: string): Promise<As
   const q = question.trim();
   if (!programId || !q) return { text: "Vui lòng chọn chương trình và nhập câu hỏi.", usedFallback: true, citations: [] };
 
-  const res = await ragAnswer(programId, q);
+  const res = await ragAnswer(programId, q, { userId: user.id });
   await logAudit({ userId: user.id, action: "AI_CHAT", entityType: "Program", entityId: programId, detail: { question: q } });
   return { text: res.text, usedFallback: res.usedFallback, citations: res.citations };
 }

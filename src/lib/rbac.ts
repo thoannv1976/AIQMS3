@@ -28,7 +28,8 @@ export type Capability =
   | "improvement:write"
   | "ai:use"
   | "audit:view"
-  | "admin:users";
+  | "admin:users"
+  | "admin:settings";
 
 const VIEW_ALL: Capability[] = [
   "dashboard:view",

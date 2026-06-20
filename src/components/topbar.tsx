@@ -5,8 +5,8 @@ import { aiConfigured } from "@/lib/ai/client";
 import { logoutAction } from "@/lib/actions/session";
 import { initials } from "@/lib/utils";
 
-export function Topbar({ user }: { user: SessionUser }) {
-  const aiOn = aiConfigured();
+export async function Topbar({ user }: { user: SessionUser }) {
+  const aiOn = await aiConfigured();
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6">
       <div className="text-sm text-slate-500">

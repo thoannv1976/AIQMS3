@@ -221,6 +221,8 @@ model User {
   notifications     Notification[]
   aiResults         AiAnalysisResult[]
   chatSessions      AiChatSession[]
+  aiUsageLogs       AiUsageLog[]
+  settingsUpdated   AppSetting[]
   approvalsRequested ApprovalFlow[]   @relation("ApprovalRequester")
   approvalsToDecide  ApprovalFlow[]   @relation("ApprovalApprover")
 }
@@ -722,6 +724,37 @@ model AiChatMessage {
   content   String
   citations Json? // [{ evidenceId, title, snippet }]
   createdAt DateTime @default(now())
+}
+
+// Per-call AI usage ledger — powers the admin token/cost dashboard.
+model AiUsageLog {
+  id           String   @id @default(cuid())
+  feature      String // evidence_summary | criterion_suggestion | sar_draft | sar_review | survey_analysis | improvement_suggestion | rag_chat | matrix_check | connection_test | other
+  model        String
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  totalTokens  Int      @default(0)
+  costUsd      Float    @default(0)
+  usedFallback Boolean  @default(false) // true => local heuristic, no external call
+  success      Boolean  @default(true)
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([feature])
+}
+
+// ============================ APP SETTINGS ============================
+
+// Generic key/value settings store. AI config lives under key "ai.config"
+// with value { model, mode, apiKeyEnc, apiKeyLast4 } (apiKeyEnc is AES-256-GCM).
+model AppSetting {
+  key         String   @id
+  value       Json
+  updatedById String?
+  updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime @default(now()) @updatedAt
 }
 
 // ============================ AUDIT & APPROVAL ============================
