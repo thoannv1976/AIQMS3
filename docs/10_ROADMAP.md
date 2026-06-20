@@ -14,11 +14,14 @@ Bộ tiêu chuẩn AUN-QA, tiêu chí, nhiệm vụ Kanban, upload & quản lý 
 ## Giai đoạn 3 — Báo cáo & AI cơ bản ✅ (mốc MVP)
 Báo cáo tiến độ/danh mục minh chứng; SAR; AI tóm tắt, gợi ý tiêu chí, soạn/rà soát SAR, chatbot RAG.
 
-## Giai đoạn 4 — AI nâng cao & quản trị chất lượng (kế tiếp)
-- AI Gap Analysis theo tiêu chí; kiểm tra logic PLO–CLO–Assessment–Rubric; rà soát đề cương tự động.
-- AI Review SAR nâng cao; **Accreditation Readiness Score**; **Evidence Strength Score**.
-- Quản lý PDCA nâng cao (minh chứng trước/sau cải tiến); module giải trình đánh giá ngoài.
-- Khảo sát nâng cao; phân tích xu hướng qua nhiều chu kỳ.
+## Giai đoạn 4 — AI nâng cao & quản trị chất lượng (đang triển khai)
+- ✅ **AI Gap Analysis theo từng tiêu chí** (trang `/readiness`).
+- ✅ **Accreditation Readiness Score** + **Evidence Strength Score** (engine `lib/quality/scoring.ts`, xếp hạng AUN-QA 7 mức).
+- ✅ **Kiểm tra logic PLO–CLO–Assessment–Rubric** (trang `/curriculum-check`, engine `lib/quality/curriculum.ts`).
+- 🟡 Rà soát đề cương tự động (mới kiểm tra phương pháp đánh giá/rubric ở mức cấu trúc) — cần AI rà soát nội dung đề cương đầy đủ.
+- 🟡 AI Review SAR nâng cao (đã có rà soát SAR + đối chiếu đủ minh chứng trong điểm sẵn sàng) — cần chấm điểm chất lượng SAR theo rubric.
+- ⬜ Quản lý PDCA nâng cao (minh chứng trước/sau cải tiến); module giải trình đánh giá ngoài.
+- ⬜ Khảo sát nâng cao; phân tích xu hướng qua nhiều chu kỳ.
 
 ## Giai đoạn 5 — Pilot, Cloud Run & mở rộng
 - Pilot 1 chương trình với dữ liệu thật; deploy Cloud Run + Cloud SQL + Cloud Storage + Secret Manager.
