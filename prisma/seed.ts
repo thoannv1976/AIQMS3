@@ -427,6 +427,7 @@ async function main() {
       title: "Khảo sát nhà tuyển dụng về năng lực sinh viên tốt nghiệp",
       audience: "EMPLOYER",
       status: "CLOSED",
+      createdAt: new Date(2022, 5, 15),
       questions: {
         create: [
           { text: "Mức độ hài lòng về năng lực chuyên môn", type: "LIKERT", order: 1 },
@@ -468,6 +469,40 @@ async function main() {
       questions: { create: [{ text: "Mức độ hài lòng tổng thể về chương trình", type: "LIKERT", order: 1 }] },
     },
   });
+
+  // Multi-year satisfaction surveys → stakeholder comparison + trend analysis.
+  const audVi: Record<string, string> = { STUDENT: "sinh viên", ALUMNI: "cựu sinh viên", EMPLOYER: "nhà tuyển dụng" };
+  const satProfile: Array<{ audience: "STUDENT" | "ALUMNI" | "EMPLOYER"; avgByYear: Record<number, number> }> = [
+    { audience: "STUDENT", avgByYear: { 2023: 3.4, 2024: 3.7, 2025: 4.0 } },
+    { audience: "ALUMNI", avgByYear: { 2023: 3.6, 2024: 3.7, 2025: 3.9 } },
+    { audience: "EMPLOYER", avgByYear: { 2023: 3.3, 2024: 3.5, 2025: 3.8 } },
+  ];
+  for (const { audience, avgByYear } of satProfile) {
+    for (const [yearStr, avg] of Object.entries(avgByYear)) {
+      const year = Number(yearStr);
+      const sv = await prisma.survey.create({
+        data: {
+          programId: program.id,
+          title: `Khảo sát hài lòng ${audVi[audience]} ${year}`,
+          audience,
+          status: "CLOSED",
+          createdAt: new Date(year, 5, 15),
+          questions: { create: [{ text: "Mức độ hài lòng tổng thể về chương trình", type: "LIKERT", order: 1 }] },
+        },
+        include: { questions: true },
+      });
+      const q = sv.questions[0];
+      // Symmetric offsets (sum 0) preserve the target mean while keeping a realistic spread.
+      const offsets = [-0.6, -0.3, -0.1, 0, 0, 0.1, 0.3, 0.6];
+      for (let i = 0; i < offsets.length; i++) {
+        const resp = await prisma.surveyResponse.create({
+          data: { surveyId: sv.id, respondent: `${audience}-${year}-${i + 1}`, submittedAt: new Date(year, 5, 20) },
+        });
+        const v = Math.round(Math.max(1, Math.min(5, avg + offsets[i])) * 100) / 100;
+        await prisma.surveyAnswer.create({ data: { responseId: resp.id, questionId: q.id, valueNumber: v } });
+      }
+    }
+  }
 
   // ---------------- OBE outcome assessment (multi-period for trend analysis) ----------------
   const obePeriods: Array<{ semester: string; cohort: string; rates: Record<string, number> }> = [

@@ -25,19 +25,21 @@ export function LineChartCard({
   lines,
   height = 280,
   refLine,
+  domainMax = 100,
 }: {
   data: Array<Record<string, string | number>>;
   xKey: string;
   lines: Array<{ key: string; name: string; color?: string }>;
   height?: number;
   refLine?: { y: number; label: string };
+  domainMax?: number;
 }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 4 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" vertical={false} />
         <XAxis dataKey={xKey} tick={{ fontSize: 11, fill: "#64748b" }} />
-        <YAxis tick={{ fontSize: 11, fill: "#64748b" }} domain={[0, 100]} />
+        <YAxis tick={{ fontSize: 11, fill: "#64748b" }} domain={[0, domainMax]} />
         <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
         <Legend wrapperStyle={{ fontSize: 11 }} />
         {refLine && (
