@@ -667,6 +667,7 @@ model Task {
   status      TaskStatus   @default(TODO)
   priority    TaskPriority @default(MEDIUM)
   unit        String?
+  startDate   DateTime?
   dueDate     DateTime?
   assigneeId  String?
   assignee    User?        @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)

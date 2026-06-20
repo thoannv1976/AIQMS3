@@ -403,7 +403,10 @@ async function main() {
     ["Hoàn thiện hồ sơ đội ngũ giảng viên", "Phòng TCNS", "DONE", "MEDIUM", -10, "5.1"],
     ["Chuẩn bị lịch làm việc đoàn đánh giá ngoài", "Phòng KT&ĐBCL", "TODO", "URGENT", 21, null as unknown as string],
   ];
+  let taskIdx = 0;
   for (const [title, unit, status, priority, due, crit] of taskDefs) {
+    // Stagger start dates so the Gantt view shows a spread of bars.
+    const span = 10 + (taskIdx % 3) * 6; // 10–22 day tasks
     await prisma.task.create({
       data: {
         programId: program.id,
@@ -413,11 +416,13 @@ async function main() {
         unit,
         status,
         priority,
+        startDate: new Date(Date.now() + (due - span) * day),
         dueDate: new Date(Date.now() + due * day),
         assigneeId: qa.id,
         createdById: qa.id,
       },
     });
+    taskIdx += 1;
   }
 
   // ---------------- Surveys ----------------
