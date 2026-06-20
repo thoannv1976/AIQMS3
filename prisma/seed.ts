@@ -469,21 +469,24 @@ async function main() {
     },
   });
 
-  // ---------------- OBE outcome assessment ----------------
-  const obeDefs: Array<[string, number, number]> = [
-    ["PLO1", 82, 70], ["PLO2", 76, 70], ["PLO3", 61, 70], ["PLO4", 79, 70],
-    ["PLO5", 73, 70], ["PLO6", 88, 70], ["PLO7", 64, 70],
+  // ---------------- OBE outcome assessment (multi-period for trend analysis) ----------------
+  const obePeriods: Array<{ semester: string; cohort: string; rates: Record<string, number> }> = [
+    { semester: "2024-1", cohort: "K2021", rates: { PLO1: 70, PLO2: 80, PLO3: 55, PLO4: 79, PLO5: 67, PLO6: 85, PLO7: 73 } },
+    { semester: "2024-2", cohort: "K2021", rates: { PLO1: 76, PLO2: 78, PLO3: 58, PLO4: 79, PLO5: 70, PLO6: 86, PLO7: 69 } },
+    { semester: "2025-1", cohort: "K2022", rates: { PLO1: 82, PLO2: 76, PLO3: 61, PLO4: 79, PLO5: 73, PLO6: 88, PLO7: 64 } },
   ];
   await prisma.outcomeAssessment.createMany({
-    data: obeDefs.map(([ploCode, achievedRate, threshold]) => ({
-      programId: program.id,
-      ploCode,
-      cohort: "K2022",
-      semester: "2025-1",
-      achievedRate,
-      threshold,
-      sampleSize: 180,
-    })),
+    data: obePeriods.flatMap((p) =>
+      Object.entries(p.rates).map(([ploCode, achievedRate]) => ({
+        programId: program.id,
+        ploCode,
+        cohort: p.cohort,
+        semester: p.semester,
+        achievedRate,
+        threshold: 70,
+        sampleSize: 180,
+      })),
+    ),
   });
 
   // ---------------- Improvement plans (PDCA) ----------------
