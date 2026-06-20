@@ -812,6 +812,7 @@ model ApprovalFlow {
   requestedBy   User?          @relation("ApprovalRequester", fields: [requestedById], references: [id], onDelete: SetNull)
   approverId    String?
   approver      User?          @relation("ApprovalApprover", fields: [approverId], references: [id], onDelete: SetNull)
+  step          Int            @default(1) // order within a multi-step approval chain
   status        ApprovalStatus @default(PENDING)
   note          String?
   createdAt     DateTime       @default(now())

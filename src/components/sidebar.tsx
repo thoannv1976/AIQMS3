@@ -22,6 +22,7 @@ import {
   Workflow,
   Gavel,
   BarChartBig,
+  CheckCheck,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -47,6 +48,7 @@ const ICONS: Record<string, LucideIcon> = {
   curriculum: Workflow,
   external: Gavel,
   benchmark: BarChartBig,
+  approval: CheckCheck,
 };
 
 export function Sidebar({ groups }: { groups: NavGroup[] }) {

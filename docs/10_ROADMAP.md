@@ -33,7 +33,7 @@ Báo cáo tiến độ/danh mục minh chứng; SAR; AI tóm tắt, gợi ý ti�
 - ✅ **Nâng RAG bằng pgvector** (`lib/ai/vector.ts`: tìm kiếm vector trong Postgres, chỉ mục HNSW cosine, fallback cosine trong app; bật bằng `RAG_DRIVER=pgvector` + `npm run rag:pgvector`).
 - 🟡 Embeddings provider thật (Vertex AI / Voyage) thay `embedText` heuristic — còn lại.
 
-## Giai đoạn 6 — Hoàn thiện theo bản mô tả (đang triển khai)
+## Giai đoạn 6 — Hoàn thiện theo bản mô tả ✅
 Bổ sung các mục còn thiếu/nâng cấp sau khi đối chiếu bản mô tả phần mềm:
 - ✅ **Vai trò theo phạm vi chương trình** (`UserProgramRole`): lọc chương trình theo phạm vi + nâng quyền cục bộ (`canInProgram`), UI gán/gỡ tại `/admin/users`.
 - ✅ **Xử lý tài liệu bất đồng bộ** (`after()`): upload trả về ngay, trích xuất + RAG chạy nền; `Document.status` PROCESSING/READY/FAILED hiển thị trên trang minh chứng.
@@ -41,7 +41,7 @@ Bổ sung các mục còn thiếu/nâng cấp sau khi đối chiếu bản mô t
 - ✅ **Xem nhiệm vụ dạng Gantt** (`/tasks?view=gantt`): dòng thời gian theo `startDate`→`dueDate`, mốc hôm nay, tô đỏ quá hạn; toggle Kanban/Gantt.
 - ✅ **Trung tâm thông báo** (`Notification`): chuông + số chưa đọc trên topbar, dropdown + trang `/notifications`; tự sinh khi duyệt minh chứng / gán vai trò.
 - ✅ **Giao diện song ngữ Việt/Anh** (i18n nhẹ `lib/i18n.ts`): bộ chuyển VI/EN trên topbar (cookie), dịch toàn bộ menu điều hướng + chrome; dữ liệu dùng `nameVi/nameEn`. Thân trang dịch dần (mở rộng được qua `t()`).
-- ⬜ (Tùy chọn) Quy trình phê duyệt đa bước cấu hình (`ApprovalFlow`).
+- ✅ **Quy trình phê duyệt đa bước cấu hình** (`ApprovalFlow` + `step`): gửi phê duyệt chọn chuỗi người duyệt theo thứ tự trên báo cáo, inbox `/approvals` duyệt/từ chối theo bước, tự chuyển bước + chốt báo cáo + thông báo.
 
 ## Gộp 3 giai đoạn chiến lược
 1. **Xây dựng MVP** (GĐ 0–3) — đã hoàn thành.

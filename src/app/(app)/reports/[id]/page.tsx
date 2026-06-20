@@ -10,6 +10,7 @@ import { ReportSectionStatus, ReportStatus } from "@/generated/prisma/enums";
 import { pct } from "@/lib/utils";
 import { SectionEditor } from "./SectionEditor";
 import { setReportStatusAction } from "../actions";
+import { ApprovalPanel } from "../../approvals/ApprovalPanel";
 
 export default async function ReportDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -36,6 +37,15 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ i
   const progress = pct(done, total);
   const canWrite = can(user.role, "report:write");
   const canApprove = can(user.role, "report:approve");
+
+  const [approvalSteps, approverUsers] = await Promise.all([
+    prisma.approvalFlow.findMany({
+      where: { entityType: "report", entityId: id },
+      orderBy: { step: "asc" },
+      include: { approver: { select: { fullName: true } } },
+    }),
+    prisma.user.findMany({ where: { isActive: true }, orderBy: { fullName: "asc" }, select: { id: true, fullName: true, role: true } }),
+  ]);
 
   return (
     <div>
@@ -74,13 +84,21 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ i
           </div>
           {canApprove && report.status !== ReportStatus.APPROVED && (
             <form action={setReportStatusAction.bind(null, report.id, ReportStatus.APPROVED)}>
-              <Button type="submit" size="sm">
-                <CheckCircle2 className="h-4 w-4" /> Phê duyệt báo cáo
+              <Button type="submit" size="sm" variant="outline">
+                <CheckCircle2 className="h-4 w-4" /> Duyệt nhanh
               </Button>
             </form>
           )}
         </CardContent>
       </Card>
+
+      <ApprovalPanel
+        entityType="report"
+        entityId={report.id}
+        steps={approvalSteps}
+        users={approverUsers}
+        canSubmit={canWrite}
+      />
 
       <div className="space-y-3">
         {report.sections.map((s) => (

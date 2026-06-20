@@ -681,6 +681,14 @@ async function main() {
     ],
   });
 
+  // ---------------- Approval flow (demo, 2-step on the SAR) ----------------
+  await prisma.approvalFlow.createMany({
+    data: [
+      { entityType: "report", entityId: report.id, requestedById: qa.id, approverId: facultyHead.id, step: 1, status: "PENDING" },
+      { entityType: "report", entityId: report.id, requestedById: qa.id, approverId: byRole("BOARD").id, step: 2, status: "PENDING" },
+    ],
+  });
+
   // ---------------- Audit log samples ----------------
   await prisma.auditLog.createMany({
     data: [
