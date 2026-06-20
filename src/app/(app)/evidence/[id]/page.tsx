@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { X, FileText } from "lucide-react";
+import { X, FileText, Download, RefreshCw } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
@@ -10,7 +10,7 @@ import { evidenceStatus, confidentiality as confMeta } from "@/lib/labels";
 import { evidenceStrength, BAND_META } from "@/lib/quality/scoring";
 import { formatDate, formatBytes } from "@/lib/utils";
 import { AiPanel, StatusControl } from "./EvidenceActions";
-import { unlinkCriterionAction, linkCriterionForm } from "../actions";
+import { unlinkCriterionAction, linkCriterionForm, reprocessEvidenceAction } from "../actions";
 
 export default async function EvidenceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -68,9 +68,30 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
                 </DescItem>
                 <DescItem label="Tệp">
                   {evidence.fileName ? (
-                    <span className="inline-flex items-center gap-1.5">
-                      <FileText className="h-4 w-4 text-slate-400" />
-                      {evidence.fileName} ({formatBytes(evidence.fileSize)})
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5">
+                        <FileText className="h-4 w-4 text-slate-400" />
+                        {evidence.fileName} ({formatBytes(evidence.fileSize)})
+                      </span>
+                      {evidence.storagePath && (
+                        <a
+                          href={`/evidence/${evidence.id}/file`}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700"
+                        >
+                          <Download className="h-3.5 w-3.5" /> Tải về
+                        </a>
+                      )}
+                      {canWrite && evidence.storagePath && (
+                        <form action={reprocessEvidenceAction.bind(null, evidence.id)}>
+                          <button
+                            type="submit"
+                            className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700"
+                            title="Trích xuất lại văn bản, tạo lại chỉ mục RAG"
+                          >
+                            <RefreshCw className="h-3.5 w-3.5" /> Xử lý lại
+                          </button>
+                        </form>
+                      )}
                     </span>
                   ) : (
                     "Không có tệp"

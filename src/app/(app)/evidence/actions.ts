@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { logAudit } from "@/lib/audit";
-import { saveFile, buildEvidencePath } from "@/lib/storage";
+import { saveFile, buildEvidencePath, readFile } from "@/lib/storage";
 import { processEvidenceDocument } from "@/lib/ai/documents";
 import { summarizeText, suggestCriteria } from "@/lib/ai/features";
 import { EvidenceStatus, AiAnalysisType, Confidentiality } from "@/generated/prisma/enums";
@@ -57,7 +57,7 @@ export async function uploadEvidence(_prev: FormState, formData: FormData): Prom
       criterionCode: null,
       fileName: file.name,
     });
-    const stored = await saveFile(rel, buffer);
+    const stored = await saveFile(rel, buffer, fileType ?? undefined);
     storagePath = stored.storagePath;
     checksum = stored.checksum;
   }
@@ -95,6 +95,30 @@ export async function uploadEvidence(_prev: FormState, formData: FormData): Prom
 
   revalidatePath("/evidence");
   redirect(`/evidence/${evidence.id}`);
+}
+
+export async function reprocessEvidenceAction(evidenceId: string): Promise<void> {
+  const user = await requireUser();
+  if (!can(user.role, "evidence:write")) return;
+  const evidence = await prisma.evidence.findUnique({
+    where: { id: evidenceId },
+    select: { id: true, programId: true, storagePath: true, fileName: true, fileType: true },
+  });
+  if (!evidence?.storagePath || !evidence.fileName) return;
+  try {
+    const buffer = await readFile(evidence.storagePath);
+    await processEvidenceDocument({
+      evidenceId: evidence.id,
+      programId: evidence.programId,
+      buffer,
+      fileName: evidence.fileName,
+      fileType: evidence.fileType ?? undefined,
+    });
+    await logAudit({ userId: user.id, action: "REPROCESS", entityType: "Evidence", entityId: evidenceId });
+  } catch (e) {
+    console.error("[evidence] reprocess failed:", e);
+  }
+  revalidatePath(`/evidence/${evidenceId}`);
 }
 
 export async function summarizeEvidenceAction(evidenceId: string): Promise<{ text: string; usedFallback: boolean }> {

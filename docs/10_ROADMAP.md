@@ -25,9 +25,11 @@ Báo cáo tiến độ/danh mục minh chứng; SAR; AI tóm tắt, gợi ý ti�
 - ✅ **PDCA nâng cao** (minh chứng trước/sau cải tiến tại `/improvements`) + **module giải trình đánh giá ngoài** (`/external-review`: ghi nhận khuyến nghị, AI soạn giải trình, theo dõi khắc phục).
 
 ## Giai đoạn 5 — Pilot, Cloud Run & mở rộng (đang triển khai)
-- 🟡 Pilot 1 chương trình với dữ liệu thật; deploy **Cloud Run + Cloud SQL + Cloud Storage + Secret Manager** *(Dockerfile/seed đã vá để build deploy sạch — đang chạy thử)*.
-- ✅ **Xuất báo cáo Word/PDF** (SAR tại `/reports/[id]`) + **danh mục minh chứng Excel** (`/evidence`).
-- ⬜ Benchmark nhiều chương trình; tích hợp LMS/Moodle/cổng đào tạo; SSO/Identity Platform.
+- 🟡 Pilot 1 chương trình dữ liệu thật; deploy **Cloud Run + Cloud SQL + Secret Manager** *(Dockerfile/seed đã vá để build deploy sạch — đang chạy thử)*.
+- ✅ **Lưu trữ minh chứng trên Cloud Storage** (driver GCS `lib/storage.ts`: upload `gs://`, **V4 signed URL**, tải tệp `/evidence/[id]/file`, xử lý lại).
+- ✅ **Xuất báo cáo Word/PDF** (SAR) + **danh mục minh chứng Excel**.
+- ✅ **Benchmark nhiều chương trình** (`/benchmark`: đối sánh readiness/AUN/OBE/độ mạnh MC).
+- ⬜ Tích hợp LMS/Moodle/cổng đào tạo; SSO/Identity Platform.
 - ⬜ Nâng RAG: embeddings provider thật + **pgvector / Vertex AI Vector Search**.
 
 ## Gộp 3 giai đoạn chiến lược

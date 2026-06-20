@@ -57,9 +57,28 @@ gcloud run deploy aiqms3 \
 - `npm run db:seed` đã tự chạy `prisma generate` trước khi seed, nên không gặp lỗi
   `Cannot find module 'src/generated/prisma/client'` trên bản clone mới.
 
-## Lưu trữ file (GCS)
-`src/lib/storage.ts` có sẵn điểm mở rộng `STORAGE_DRIVER=gcs`. Bổ sung `@google-cloud/storage`,
-dùng signed URL cho tệp nhạy cảm, bật versioning bucket.
+## Lưu trữ & xử lý minh chứng (Cloud Storage)
+`src/lib/storage.ts` đã hiện thực driver **GCS** (`@google-cloud/storage`). Bật bằng env:
+```
+STORAGE_DRIVER=gcs
+GCS_BUCKET=aiqms-evidence
+GCS_PROJECT_ID=your-project
+```
+- **Upload**: tệp minh chứng lưu vào `gs://<bucket>/evidence/{program}/{year}/{criterion}/{file}`; CSDL chỉ giữ metadata + `storagePath`.
+- **Tải tệp**: route `/evidence/[id]/file` → với GCS trả về **V4 signed URL** (15 phút), tệp tải thẳng từ Cloud Storage (không proxy qua app) → chịu tải tốt với khối lượng lớn.
+- **Xử lý lại**: nút "Xử lý lại" trên trang minh chứng đọc tệp từ kho rồi trích xuất văn bản + tạo lại chỉ mục RAG (dùng khi nhập liệu hàng loạt).
+
+### Thiết lập GCP
+1. Tạo bucket (uniform access, **versioning** bật, lifecycle tùy chính sách lưu trữ).
+2. Service account cho Cloud Run, cấp quyền:
+   - `roles/storage.objectAdmin` trên bucket (đọc/ghi/xóa object).
+   - `roles/iam.serviceAccountTokenCreator` cho chính SA đó (để ký **V4 signed URL** qua `iamcredentials.signBlob` — không cần tải khóa private).
+3. Cloud Run tự dùng **Application Default Credentials** (không cần `GOOGLE_APPLICATION_CREDENTIALS`).
+
+### Xử lý ở quy mô lớn (rất nhiều minh chứng)
+- Hiện tại pipeline trích xuất văn bản → chunk → embedding chạy **đồng bộ** khi upload (best-effort, không chặn nghiệp vụ nếu lỗi).
+- Khi khối lượng lớn: tách phần xử lý sang **worker bất đồng bộ** (Cloud Tasks/Pub-Sub) — upload chỉ lưu tệp + đẩy message; worker gọi `processEvidenceDocument`. Nút "Xử lý lại" và trường `Document.status` đã sẵn cho mô hình này.
+- Nâng RAG: thay embeddings cục bộ bằng provider thật + **pgvector / Vertex AI Vector Search** (GĐ5).
 
 ## Sao lưu & bảo mật
 - Cloud SQL: bật **automated backup** + **PITR**.

@@ -43,6 +43,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "Phân tích chất lượng (AI)",
     items: [
       { href: "/readiness", label: "Sẵn sàng kiểm định", icon: "readiness", capability: "dashboard:view" },
+      { href: "/benchmark", label: "So sánh chương trình", icon: "benchmark", capability: "dashboard:view" },
       { href: "/curriculum-check", label: "Kiểm tra logic CTĐT", icon: "curriculum", capability: "outcome:view" },
     ],
   },

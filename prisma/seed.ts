@@ -580,6 +580,83 @@ async function main() {
     ],
   });
 
+  // ================= Second program (cross-program benchmark) =================
+  const program2 = await prisma.program.create({
+    data: {
+      facultyId: faculty.id,
+      code: "CS",
+      nameVi: "Khoa học máy tính",
+      nameEn: "Computer Science",
+      degreeLevel: "BACHELOR",
+      totalCredits: 135,
+      objectives: "Đào tạo cử nhân Khoa học máy tính có năng lực nghiên cứu và phát triển phần mềm.",
+    },
+  });
+  const cycle2 = await prisma.accreditationCycle.create({
+    data: {
+      programId: program2.id,
+      standardSetId: standardSet.id,
+      name: "Kiểm định AUN-QA 2026 — Khoa học máy tính",
+      year: 2026,
+      status: "SELF_ASSESSMENT",
+      startDate: new Date(2026, 0, 15),
+      targetDate: new Date(2026, 10, 30),
+    },
+  });
+  const ev2Defs: Array<{ code: string; title: string; crit: string[]; status: "APPROVED" | "SUBMITTED" | "UPLOADED"; provider: string; text?: string }> = [
+    { code: "E-1.1-01", title: "Quyết định ban hành chuẩn đầu ra CTĐT KHMT", crit: ["1.1"], status: "APPROVED", provider: "Phòng Đào tạo", text: "Chuẩn đầu ra chương trình Khoa học máy tính được xây dựng theo CDIO, phù hợp tầm nhìn và sứ mạng nhà trường." },
+    { code: "E-2.1-01", title: "Khung chương trình và ma trận chuẩn đầu ra", crit: ["2.1", "2.2"], status: "APPROVED", provider: "Khoa CNTT", text: "Cấu trúc chương trình KHMT thể hiện tính tích hợp giữa nền tảng toán-tin và chuyên ngành." },
+    { code: "E-4.1-01", title: "Quy định đánh giá người học", crit: ["4.1"], status: "SUBMITTED", provider: "Bộ môn HTTT" },
+    { code: "E-7.1-01", title: "Danh mục phòng lab và học liệu", crit: ["7.1"], status: "UPLOADED", provider: "Trung tâm CNTT" },
+    { code: "E-8.1-01", title: "Thống kê tỷ lệ tốt nghiệp 2021-2025", crit: ["8.1"], status: "SUBMITTED", provider: "Phòng Đào tạo", text: "Tỷ lệ tốt nghiệp đúng hạn của chương trình KHMT đạt trên 80% trong ba khóa gần nhất." },
+  ];
+  for (const ev of ev2Defs) {
+    const e = await prisma.evidence.create({
+      data: {
+        programId: program2.id, cycleId: cycle2.id, code: ev.code, title: ev.title,
+        providerUnit: ev.provider, fileName: `${ev.code.toLowerCase()}.pdf`, fileType: "application/pdf", fileSize: 200000,
+        storagePath: `local://evidence/CS/2026/${ev.code}.pdf`, status: ev.status, confidentiality: "INTERNAL",
+        uploadedById: qa.id,
+        approvedById: ev.status === "APPROVED" ? facultyHead.id : null,
+        approvedAt: ev.status === "APPROVED" ? new Date() : null,
+        criterionLinks: { create: ev.crit.map((c) => ({ criterionId: critByCode(c).id })) },
+      },
+    });
+    if (ev.text) {
+      const doc = await prisma.document.create({
+        data: { evidenceId: e.id, programId: program2.id, fileName: e.fileName!, fileType: e.fileType, extractedText: ev.text, summary: ev.text.slice(0, 160), language: "vi", status: "READY" },
+      });
+      const chunks = chunkText(ev.text);
+      await prisma.documentChunk.createMany({
+        data: chunks.map((content, i) => ({ documentId: doc.id, chunkIndex: i, content, tokenCount: content.split(/\s+/).length, embedding: embedText(content) })),
+      });
+    }
+  }
+  const report2 = await prisma.selfAssessmentReport.create({
+    data: { cycleId: cycle2.id, title: "Báo cáo tự đánh giá chương trình KHMT theo AUN-QA 2026", status: "DRAFT" },
+  });
+  let order2 = 0;
+  for (const std of aunStandards) {
+    await prisma.reportSection.create({
+      data: {
+        reportId: report2.id,
+        criterionId: critByCode(std[2][0][0]).id,
+        title: `Tiêu chuẩn ${std[0]}: ${std[1]}`,
+        content: order2 < 2 ? `Chương trình KHMT đáp ứng yêu cầu cơ bản của tiêu chuẩn ${std[0]}; đang tiếp tục bổ sung minh chứng và số liệu.` : null,
+        strengths: order2 < 2 ? "Nền tảng học thuật vững, đội ngũ giảng viên có năng lực nghiên cứu." : null,
+        status: order2 < 2 ? "DONE" : order2 < 4 ? "DRAFTING" : "NOT_STARTED",
+        order: order2++,
+        assignedToId: qa.id,
+        reviewerId: facultyHead.id,
+      },
+    });
+  }
+  await prisma.outcomeAssessment.createMany({
+    data: ([["PLO1", 72], ["PLO2", 68], ["PLO3", 58], ["PLO4", 75], ["PLO5", 64]] as Array<[string, number]>).map(
+      ([ploCode, achievedRate]) => ({ programId: program2.id, ploCode, cohort: "K2022", semester: "2025-1", achievedRate, threshold: 70, sampleSize: 120 }),
+    ),
+  });
+
   // ---------------- Audit log samples ----------------
   await prisma.auditLog.createMany({
     data: [
@@ -590,7 +667,7 @@ async function main() {
     ],
   });
 
-  console.log(`✅ Done. ${users.length} users, 1 program, ${courses.length} courses, ${allCriteria.length} criteria, ${evidenceDefs.length} evidence.`);
+  console.log(`✅ Done. ${users.length} users, 2 programs, ${courses.length} courses, ${allCriteria.length} criteria, ${evidenceDefs.length + ev2Defs.length} evidence.`);
   console.log("   Login: admin@aiqms.edu.vn / Aiqms@123");
 }
 

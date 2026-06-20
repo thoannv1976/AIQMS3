@@ -21,6 +21,7 @@ import {
   Gauge,
   Workflow,
   Gavel,
+  BarChartBig,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -45,6 +46,7 @@ const ICONS: Record<string, LucideIcon> = {
   readiness: Gauge,
   curriculum: Workflow,
   external: Gavel,
+  benchmark: BarChartBig,
 };
 
 export function Sidebar({ groups }: { groups: NavGroup[] }) {
