@@ -96,6 +96,24 @@ export function canAny(role: Role, capabilities: Capability[]): boolean {
   return capabilities.some((c) => can(role, c));
 }
 
+// Institution-wide roles coordinate across every program; others are scoped to the
+// programs they are explicitly assigned to (via UserProgramRole).
+const INSTITUTION_ROLES: Role[] = [Role.ADMIN, Role.BOARD, Role.QA_OFFICE, Role.TRAINING_OFFICE];
+
+export function isInstitutionWide(role: Role): boolean {
+  return INSTITUTION_ROLES.includes(role);
+}
+
+/**
+ * Effective capability within a specific program: the user's system role OR any
+ * program-scoped role they hold in that program. Lets a user be elevated (e.g. a
+ * lecturer acting as program coordinator) without changing their system role.
+ */
+export function canInProgram(systemRole: Role, programRoles: Role[], capability: Capability): boolean {
+  if (can(systemRole, capability)) return true;
+  return programRoles.some((r) => can(r, capability));
+}
+
 export const ROLE_LABELS: Record<Role, string> = {
   ADMIN: "Quản trị hệ thống",
   BOARD: "Ban Giám hiệu",

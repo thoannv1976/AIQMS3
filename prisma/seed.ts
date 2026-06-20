@@ -657,6 +657,16 @@ async function main() {
     ),
   });
 
+  // ---------------- Program-scoped role assignments (demo) ----------------
+  // Scopes these users to a single program (and elevates the department head in CS).
+  await prisma.userProgramRole.createMany({
+    data: [
+      { userId: byRole("LECTURER").id, programId: program.id, role: "LECTURER" },
+      { userId: byRole("DEPARTMENT").id, programId: program2.id, role: "FACULTY" },
+    ],
+    skipDuplicates: true,
+  });
+
   // ---------------- Audit log samples ----------------
   await prisma.auditLog.createMany({
     data: [

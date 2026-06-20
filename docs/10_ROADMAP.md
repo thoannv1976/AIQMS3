@@ -33,7 +33,17 @@ Báo cáo tiến độ/danh mục minh chứng; SAR; AI tóm tắt, gợi ý ti�
 - ✅ **Nâng RAG bằng pgvector** (`lib/ai/vector.ts`: tìm kiếm vector trong Postgres, chỉ mục HNSW cosine, fallback cosine trong app; bật bằng `RAG_DRIVER=pgvector` + `npm run rag:pgvector`).
 - 🟡 Embeddings provider thật (Vertex AI / Voyage) thay `embedText` heuristic — còn lại.
 
+## Giai đoạn 6 — Hoàn thiện theo bản mô tả (đang triển khai)
+Bổ sung các mục còn thiếu/nâng cấp sau khi đối chiếu bản mô tả phần mềm:
+- ✅ **Vai trò theo phạm vi chương trình** (`UserProgramRole`): lọc chương trình theo phạm vi + nâng quyền cục bộ (`canInProgram`), UI gán/gỡ tại `/admin/users`.
+- ⬜ Xử lý tài liệu bất đồng bộ (async) — trạng thái `Document` PROCESSING/READY/FAILED.
+- ⬜ Lưu lịch sử chat AI (`AiChatSession/Message`).
+- ⬜ Xem nhiệm vụ dạng Gantt.
+- ⬜ Trung tâm thông báo (`Notification`).
+- ⬜ Giao diện song ngữ Việt/Anh (i18n).
+- ⬜ (Tùy chọn) Quy trình phê duyệt đa bước cấu hình (`ApprovalFlow`).
+
 ## Gộp 3 giai đoạn chiến lược
 1. **Xây dựng MVP** (GĐ 0–3) — đã hoàn thành.
 2. **Nâng cấp AI thông minh** (GĐ 4) — đã hoàn thành.
-3. **Triển khai & nhân rộng** (GĐ 5) — kế tiếp.
+3. **Triển khai & nhân rộng** (GĐ 5–6) — đang hoàn thiện.
