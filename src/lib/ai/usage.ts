@@ -47,6 +47,8 @@ export const FEATURE_LABELS: Record<string, string> = {
   criterion_suggestion: "Gợi ý tiêu chí",
   sar_draft: "Soạn nháp SAR",
   sar_review: "Rà soát SAR",
+  sar_review_adv: "Rà soát SAR nâng cao",
+  syllabus_review: "Rà soát đề cương",
   survey_analysis: "Phân tích khảo sát",
   improvement_suggestion: "Đề xuất cải tiến (PDCA)",
   rag_chat: "Trợ lý AI (RAG)",

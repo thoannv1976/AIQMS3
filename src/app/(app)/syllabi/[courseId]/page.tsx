@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle, Badge, PageHeader, EmptyState } from "@/components/ui";
 import { DescItem } from "@/components/widgets";
 import { syllabusStatus, contributionLevel } from "@/lib/labels";
+import { SyllabusReviewPanel } from "./SyllabusReviewPanel";
 
 export default async function SyllabusDetailPage({ params }: { params: Promise<{ courseId: string }> }) {
   const { courseId } = await params;
@@ -31,6 +32,8 @@ export default async function SyllabusDetailPage({ params }: { params: Promise<{
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
+          <SyllabusReviewPanel courseId={course.id} />
+
           <Card>
             <CardHeader>
               <CardTitle>Đề cương học phần</CardTitle>

@@ -3,7 +3,7 @@ import { CheckCircle2 } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
-import { Card, CardContent, CardHeader, CardTitle, Badge, PageHeader, Button } from "@/components/ui";
+import { Card, CardContent, Badge, PageHeader, Button } from "@/components/ui";
 import { Progress } from "@/components/widgets";
 import { reportStatus } from "@/lib/labels";
 import { ReportSectionStatus, ReportStatus } from "@/generated/prisma/enums";

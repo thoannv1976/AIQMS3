@@ -18,8 +18,8 @@ Báo cáo tiến độ/danh mục minh chứng; SAR; AI tóm tắt, gợi ý ti�
 - ✅ **AI Gap Analysis theo từng tiêu chí** (trang `/readiness`).
 - ✅ **Accreditation Readiness Score** + **Evidence Strength Score** (engine `lib/quality/scoring.ts`, xếp hạng AUN-QA 7 mức).
 - ✅ **Kiểm tra logic PLO–CLO–Assessment–Rubric** (trang `/curriculum-check`, engine `lib/quality/curriculum.ts`).
-- 🟡 Rà soát đề cương tự động (mới kiểm tra phương pháp đánh giá/rubric ở mức cấu trúc) — cần AI rà soát nội dung đề cương đầy đủ.
-- 🟡 AI Review SAR nâng cao (đã có rà soát SAR + đối chiếu đủ minh chứng trong điểm sẵn sàng) — cần chấm điểm chất lượng SAR theo rubric.
+- ✅ **Rà soát đề cương tự động** (trang `/syllabi/[courseId]`, engine `lib/quality/syllabus.ts`): chấm mức đầy đủ + constructive alignment + AI nhận định.
+- ✅ **AI Review SAR nâng cao** (trong trình soạn SAR): chấm điểm chất lượng theo rubric (`lib/quality/sar.ts`) + đối chiếu độ mạnh minh chứng + AI gợi ý viết lại.
 - ⬜ Quản lý PDCA nâng cao (minh chứng trước/sau cải tiến); module giải trình đánh giá ngoài.
 - ⬜ Khảo sát nâng cao; phân tích xu hướng qua nhiều chu kỳ.
 

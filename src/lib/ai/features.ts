@@ -359,3 +359,91 @@ Hãy nhận định: (1) mức độ "constructive alignment" của chương tr�
         : "Chuỗi PLO–CLO–Assessment–Rubric về cơ bản nhất quán theo các quy tắc kiểm tra tự động. Vẫn nên có rà soát chuyên môn của hội đồng.",
   });
 }
+
+// ---------------------------------------------------------------------------
+// 10. Advanced SAR section review (quality-scored, evidence-aware)
+// ---------------------------------------------------------------------------
+export async function reviewReportSectionAdvanced(
+  input: {
+    title: string;
+    content?: string | null;
+    strengths?: string | null;
+    weaknesses?: string | null;
+    improvementPlan?: string | null;
+    qualityScore: number;
+    failedChecks: string[];
+    evidenceSummaries: string[];
+  },
+  meta?: AiMeta,
+): Promise<AiResult> {
+  const evidence = input.evidenceSummaries.length
+    ? input.evidenceSummaries.map((e, i) => `[MC${i + 1}] ${e}`).join("\n")
+    : "(Chưa có minh chứng được liên kết.)";
+
+  return aiComplete({
+    feature: "sar_review_adv",
+    userId: meta?.userId,
+    system: SYSTEM_QA,
+    maxTokens: 1000,
+    prompt: `Rà soát CHẤT LƯỢNG nâng cao cho mục báo cáo tự đánh giá "${input.title}".
+Điểm chất lượng tự động: ${input.qualityScore}/100. Tiêu chí chưa đạt: ${input.failedChecks.length ? input.failedChecks.join("; ") : "(không)"}.
+
+NỘI DUNG: ${input.content ?? "(trống)"}
+ĐIỂM MẠNH: ${input.strengths ?? "(trống)"}
+TỒN TẠI: ${input.weaknesses ?? "(trống)"}
+KẾ HOẠCH CẢI TIẾN: ${input.improvementPlan ?? "(trống)"}
+
+MINH CHỨNG LIÊN KẾT:
+${evidence}
+
+Hãy: (1) đánh giá từng phần (mô tả, phân tích, điểm mạnh, tồn tại, cải tiến); (2) chỉ ra các NHẬN ĐỊNH CHƯA CÓ MINH CHỨNG/SỐ LIỆU hỗ trợ; (3) phát hiện mâu thuẫn hoặc nội dung chung chung; (4) gợi ý câu/đoạn nên viết lại để tăng tính thuyết phục theo yêu cầu kiểm định.`,
+    fallback: () =>
+      `Rà soát SAR nâng cao (chưa bật AI) — điểm chất lượng ${input.qualityScore}/100.\n` +
+      (input.failedChecks.length
+        ? "Cần khắc phục:\n" + input.failedChecks.map((c) => `• ${c}`).join("\n")
+        : "Các tiêu chí cơ bản đã đạt. Nên rà soát thêm tính nhất quán giữa nhận định và minh chứng.") +
+      `\nGợi ý: mỗi nhận định nên kèm dẫn chiếu tới minh chứng [MCx] và số liệu cụ thể.`,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 11. Automatic syllabus review (completeness + constructive alignment)
+// ---------------------------------------------------------------------------
+export async function reviewSyllabus(
+  input: {
+    courseCode: string;
+    courseName: string;
+    objectives?: string | null;
+    content?: string | null;
+    teachingMethods?: string | null;
+    assessmentMethods?: string | null;
+    clos: string[];
+    ploLinks: string[];
+    completeness: number;
+    issues: string[];
+  },
+  meta?: AiMeta,
+): Promise<AiResult> {
+  return aiComplete({
+    feature: "syllabus_review",
+    userId: meta?.userId,
+    system: SYSTEM_QA,
+    maxTokens: 1000,
+    prompt: `Rà soát đề cương học phần ${input.courseCode} — "${input.courseName}". Mức đầy đủ tự động: ${input.completeness}/100.
+
+Mục tiêu: ${input.objectives ?? "(trống)"}
+Nội dung: ${truncate(input.content ?? "(trống)", 2000)}
+Phương pháp giảng dạy: ${input.teachingMethods ?? "(trống)"}
+Phương pháp đánh giá: ${input.assessmentMethods ?? "(trống)"}
+CLO: ${input.clos.length ? input.clos.join(" | ") : "(chưa có)"}
+PLO mà học phần đóng góp: ${input.ploLinks.length ? input.ploLinks.join(", ") : "(chưa có)"}
+Vấn đề tự động phát hiện: ${input.issues.length ? input.issues.join("; ") : "(không)"}
+
+Hãy đánh giá: (1) tính đầy đủ của đề cương; (2) sự tương thích kiến tạo (constructive alignment) giữa CLO – phương pháp giảng dạy – phương pháp đánh giá; (3) CLO có đo lường được không (động từ Bloom); (4) đề xuất chỉnh sửa cụ thể để chuẩn hoá theo CDIO/OBE.`,
+    fallback: () =>
+      `Rà soát đề cương ${input.courseCode} (chưa bật AI) — mức đầy đủ ${input.completeness}/100.\n` +
+      (input.issues.length
+        ? "Vấn đề:\n" + input.issues.map((i) => `• ${i}`).join("\n")
+        : "Đề cương cơ bản đầy đủ. Nên kiểm tra động từ Bloom của CLO và đối sánh CLO ↔ phương pháp đánh giá."),
+  });
+}

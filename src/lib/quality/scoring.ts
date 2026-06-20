@@ -70,6 +70,23 @@ export function bandFor(score: number): ScoreBand {
 }
 
 // --------------------------------------------------------------------------
+// Reusable rubric checklist (used by SAR-quality and syllabus reviews)
+// --------------------------------------------------------------------------
+export interface QualityCheck {
+  key: string;
+  label: string;
+  passed: boolean;
+  weight: number;
+  hint?: string;
+}
+
+export function scoreFromChecks(checks: QualityCheck[]): number {
+  const total = checks.reduce((s, c) => s + c.weight, 0);
+  const got = checks.filter((c) => c.passed).reduce((s, c) => s + c.weight, 0);
+  return total ? Math.round((got / total) * 100) : 0;
+}
+
+// --------------------------------------------------------------------------
 // Criterion Readiness (0–100)
 // --------------------------------------------------------------------------
 export interface CriterionForScore {
