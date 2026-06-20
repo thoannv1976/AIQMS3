@@ -25,6 +25,15 @@ docker build -t aiqms3 .
 docker run -p 8080:8080 -e DATABASE_URL=... -e AUTH_SECRET=... aiqms3
 ```
 Image dùng Next.js **standalone** (`output: "standalone"`), chạy `node server.js` cổng 8080.
+`Dockerfile` đã build sạch từ bản clone mới — **không cần vá thủ công**.
+
+### Ghi chú build (Prisma 7 + standalone)
+- `prisma generate` đọc `prisma.config.ts` → `env("DATABASE_URL")`, nên **biến `DATABASE_URL`
+  (dummy) phải được đặt TRƯỚC `prisma generate`** trong builder stage. Build không kết nối DB
+  thật; URL thật được cấp ở runtime qua Cloud Run env/Secret Manager.
+- Generator `prisma-client` xuất client vào **`src/generated/prisma`** (không phải
+  `node_modules/.prisma`). Runner chỉ cần copy `prisma/` + `src/generated/` — **không** copy
+  `node_modules/.prisma` (thư mục này không tồn tại với driver adapter, copy sẽ gây lỗi build).
 
 ## Triển khai Cloud Run (tóm tắt)
 ```bash
@@ -45,6 +54,8 @@ gcloud run deploy aiqms3 \
 
 ## Migrate & seed
 - `npx prisma migrate deploy` (production), `npm run db:seed` (chỉ môi trường demo/pilot).
+- `npm run db:seed` đã tự chạy `prisma generate` trước khi seed, nên không gặp lỗi
+  `Cannot find module 'src/generated/prisma/client'` trên bản clone mới.
 
 ## Lưu trữ file (GCS)
 `src/lib/storage.ts` có sẵn điểm mở rộng `STORAGE_DRIVER=gcs`. Bổ sung `@google-cloud/storage`,
