@@ -19,6 +19,17 @@ import {
 
 type Meta = { label: string; color: BadgeColor };
 
+// Document processing status (stored as a free string on Document.status).
+const DOCUMENT_STATUS: Record<string, Meta> = {
+  PENDING: { label: "Chờ xử lý", color: "slate" },
+  PROCESSING: { label: "Đang xử lý", color: "amber" },
+  READY: { label: "Đã xử lý", color: "green" },
+  FAILED: { label: "Lỗi xử lý", color: "red" },
+};
+export function documentStatus(status: string | null | undefined): Meta {
+  return (status && DOCUMENT_STATUS[status]) || { label: status || "—", color: "slate" };
+}
+
 export const evidenceStatus: Record<EvidenceStatus, Meta> = {
   UPLOADED: { label: "Đã upload", color: "blue" },
   PROCESSING: { label: "Đang xử lý", color: "amber" },

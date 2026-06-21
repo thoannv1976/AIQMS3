@@ -17,6 +17,12 @@ import {
   ScrollText,
   Settings,
   Sparkles,
+  KeyRound,
+  Gauge,
+  Workflow,
+  Gavel,
+  BarChartBig,
+  CheckCheck,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -37,6 +43,12 @@ const ICONS: Record<string, LucideIcon> = {
   obe: BarChart3,
   audit: ScrollText,
   admin: Settings,
+  aiconfig: KeyRound,
+  readiness: Gauge,
+  curriculum: Workflow,
+  external: Gavel,
+  benchmark: BarChartBig,
+  approval: CheckCheck,
 };
 
 export function Sidebar({ groups }: { groups: NavGroup[] }) {

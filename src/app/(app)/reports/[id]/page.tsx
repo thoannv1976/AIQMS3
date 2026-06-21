@@ -1,15 +1,16 @@
 import { notFound } from "next/navigation";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, FileDown, Printer } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
-import { Card, CardContent, CardHeader, CardTitle, Badge, PageHeader, Button } from "@/components/ui";
+import { Card, CardContent, Badge, PageHeader, Button } from "@/components/ui";
 import { Progress } from "@/components/widgets";
 import { reportStatus } from "@/lib/labels";
 import { ReportSectionStatus, ReportStatus } from "@/generated/prisma/enums";
 import { pct } from "@/lib/utils";
 import { SectionEditor } from "./SectionEditor";
 import { setReportStatusAction } from "../actions";
+import { ApprovalPanel } from "../../approvals/ApprovalPanel";
 
 export default async function ReportDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -37,12 +38,39 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ i
   const canWrite = can(user.role, "report:write");
   const canApprove = can(user.role, "report:approve");
 
+  const [approvalSteps, approverUsers] = await Promise.all([
+    prisma.approvalFlow.findMany({
+      where: { entityType: "report", entityId: id },
+      orderBy: { step: "asc" },
+      include: { approver: { select: { fullName: true } } },
+    }),
+    prisma.user.findMany({ where: { isActive: true }, orderBy: { fullName: "asc" }, select: { id: true, fullName: true, role: true } }),
+  ]);
+
   return (
     <div>
       <PageHeader
         title={report.title}
         description={`${report.cycle.program.code} · ${report.cycle.name}`}
-        actions={<Badge color={reportStatus[report.status].color}>{reportStatus[report.status].label}</Badge>}
+        actions={
+          <div className="flex items-center gap-2">
+            <a
+              href={`/reports/${report.id}/export?format=doc`}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              <FileDown className="h-4 w-4" /> Xuất Word
+            </a>
+            <a
+              href={`/reports/${report.id}/export?format=pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              <Printer className="h-4 w-4" /> Xuất PDF
+            </a>
+            <Badge color={reportStatus[report.status].color}>{reportStatus[report.status].label}</Badge>
+          </div>
+        }
       />
 
       <Card className="mb-6">
@@ -56,13 +84,21 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ i
           </div>
           {canApprove && report.status !== ReportStatus.APPROVED && (
             <form action={setReportStatusAction.bind(null, report.id, ReportStatus.APPROVED)}>
-              <Button type="submit" size="sm">
-                <CheckCircle2 className="h-4 w-4" /> Phê duyệt báo cáo
+              <Button type="submit" size="sm" variant="outline">
+                <CheckCircle2 className="h-4 w-4" /> Duyệt nhanh
               </Button>
             </form>
           )}
         </CardContent>
       </Card>
+
+      <ApprovalPanel
+        entityType="report"
+        entityId={report.id}
+        steps={approvalSteps}
+        users={approverUsers}
+        canSubmit={canWrite}
+      />
 
       <div className="space-y-3">
         {report.sections.map((s) => (

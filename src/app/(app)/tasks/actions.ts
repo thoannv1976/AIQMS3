@@ -24,6 +24,8 @@ export async function createTask(_prev: FormState, formData: FormData): Promise<
   const criterionId = String(formData.get("criterionId") || "") || null;
   const dueRaw = String(formData.get("dueDate") || "");
   const dueDate = dueRaw ? new Date(dueRaw) : null;
+  const startRaw = String(formData.get("startDate") || "");
+  const startDate = startRaw ? new Date(startRaw) : null;
 
   if (!title) return { error: "Vui lòng nhập tiêu đề nhiệm vụ." };
 
@@ -38,6 +40,7 @@ export async function createTask(_prev: FormState, formData: FormData): Promise<
       description,
       unit,
       priority,
+      startDate,
       dueDate,
       status: TaskStatus.TODO,
       assigneeId: user.id,

@@ -39,7 +39,11 @@ export function TaskForm({
           </Select>
         </div>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div>
+          <Label htmlFor="startDate">Ngày bắt đầu</Label>
+          <Input id="startDate" name="startDate" type="date" />
+        </div>
         <div>
           <Label htmlFor="dueDate">Hạn hoàn thành</Label>
           <Input id="dueDate" name="dueDate" type="date" />

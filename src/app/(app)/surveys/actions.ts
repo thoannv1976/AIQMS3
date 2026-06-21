@@ -40,7 +40,7 @@ export async function analyzeSurveyAction(surveyId: string): Promise<{ text: str
     audience: AUDIENCE_LABEL[survey.audience],
     openAnswers,
     averageScore: likertCount ? likertSum / likertCount : null,
-  });
+  }, { userId: user.id });
 
   await prisma.aiAnalysisResult.create({
     data: { type: AiAnalysisType.SURVEY_ANALYSIS, targetType: "survey", targetId: surveyId, result: res.text, model: res.model, usedFallback: res.usedFallback, createdById: user.id },

@@ -18,9 +18,10 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-c
     && rm -rf /var/lib/apt/lists/*
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npx prisma generate
-# Dummy DATABASE_URL so the build (which does not hit the DB) succeeds.
+# Dummy DATABASE_URL so `prisma generate` (which reads prisma.config.ts → env("DATABASE_URL"))
+# and the Next build succeed without a real database. Must be set BEFORE generate.
 ENV DATABASE_URL="postgresql://user:pass@localhost:5432/db?schema=public"
+RUN npx prisma generate
 RUN npm run build
 
 # ---- runner ----
@@ -34,10 +35,11 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-c
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-# Prisma needs the schema + generated client + engines at runtime.
+# Prisma 7 generates the client into src/generated/prisma (custom output) — copy that.
+# No node_modules/.prisma copy: with the prisma-client generator + driver adapter,
+# the legacy .prisma engine folder is not produced and copying it breaks the build.
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/src/generated ./src/generated
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 
 USER nextjs
 EXPOSE 8080

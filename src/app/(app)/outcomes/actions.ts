@@ -42,6 +42,8 @@ export async function analyzeMatrixAction(
   }
 
   const res = await aiComplete({
+    feature: "matrix_check",
+    userId: user.id,
     maxTokens: 700,
     system:
       "Bạn là chuyên gia đảm bảo chất lượng giáo dục đại học, rà soát ma trận chuẩn đầu ra (CDIO/OBE). Trả lời tiếng Việt, ngắn gọn, có khuyến nghị cụ thể.",

@@ -1,15 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { X, FileText } from "lucide-react";
+import { X, FileText, Download, RefreshCw } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { can } from "@/lib/rbac";
+import { canInProgram } from "@/lib/rbac";
+import { programRolesOf } from "@/lib/program-context";
 import { Card, CardContent, CardHeader, CardTitle, Badge, PageHeader, Select, Button } from "@/components/ui";
 import { DescItem } from "@/components/widgets";
-import { evidenceStatus, confidentiality as confMeta } from "@/lib/labels";
+import { evidenceStatus, confidentiality as confMeta, documentStatus } from "@/lib/labels";
+import { evidenceStrength, BAND_META } from "@/lib/quality/scoring";
 import { formatDate, formatBytes } from "@/lib/utils";
 import { AiPanel, StatusControl } from "./EvidenceActions";
-import { unlinkCriterionAction, linkCriterionForm } from "../actions";
+import { unlinkCriterionAction, linkCriterionForm, reprocessEvidenceAction } from "../actions";
 
 export default async function EvidenceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -34,8 +36,17 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
   const linkedIds = new Set(evidence.criterionLinks.map((l) => l.criterionId));
   const linkableCriteria = allCriteria.filter((c) => !linkedIds.has(c.id));
 
-  const canWrite = can(user.role, "evidence:write");
-  const canApprove = can(user.role, "evidence:approve");
+  const programRoles = await programRolesOf(user.id, evidence.programId);
+  const canWrite = canInProgram(user.role, programRoles, "evidence:write");
+  const canApprove = canInProgram(user.role, programRoles, "evidence:approve");
+
+  const strength = evidenceStrength({
+    status: evidence.status,
+    hasFile: Boolean(evidence.storagePath),
+    isMachineReadable: (evidence.document?._count.chunks ?? 0) > 0,
+    hasSummary: Boolean(evidence.document?.summary),
+    criterionLinkCount: evidence.criterionLinks.length,
+  });
 
   return (
     <div>
@@ -59,15 +70,58 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
                 </DescItem>
                 <DescItem label="Tệp">
                   {evidence.fileName ? (
-                    <span className="inline-flex items-center gap-1.5">
-                      <FileText className="h-4 w-4 text-slate-400" />
-                      {evidence.fileName} ({formatBytes(evidence.fileSize)})
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5">
+                        <FileText className="h-4 w-4 text-slate-400" />
+                        {evidence.fileName} ({formatBytes(evidence.fileSize)})
+                      </span>
+                      {evidence.storagePath && (
+                        <a
+                          href={`/evidence/${evidence.id}/file`}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700"
+                        >
+                          <Download className="h-3.5 w-3.5" /> Tải về
+                        </a>
+                      )}
+                      {canWrite && evidence.storagePath && (
+                        <form action={reprocessEvidenceAction.bind(null, evidence.id)}>
+                          <button
+                            type="submit"
+                            className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700"
+                            title="Trích xuất lại văn bản, tạo lại chỉ mục RAG"
+                          >
+                            <RefreshCw className="h-3.5 w-3.5" /> Xử lý lại
+                          </button>
+                        </form>
+                      )}
                     </span>
                   ) : (
                     "Không có tệp"
                   )}
                 </DescItem>
                 <DescItem label="Phiên bản">{evidence.version}</DescItem>
+                {evidence.document && (
+                  <DescItem label="Trạng thái xử lý">
+                    <span className="inline-flex items-center gap-2">
+                      <Badge color={documentStatus(evidence.document.status).color}>
+                        {documentStatus(evidence.document.status).label}
+                      </Badge>
+                      {evidence.document.status === "READY" && (
+                        <span className="text-xs text-slate-400">{evidence.document._count.chunks} đoạn RAG</span>
+                      )}
+                    </span>
+                  </DescItem>
+                )}
+                <DescItem label="Độ mạnh minh chứng">
+                  <span className="inline-flex items-center gap-2">
+                    <Badge color={BAND_META[strength.band].color}>
+                      {strength.score}/100 · {BAND_META[strength.band].label}
+                    </Badge>
+                  </span>
+                  {strength.reasons.length > 0 && (
+                    <span className="mt-1 block text-xs text-amber-700">{strength.reasons[0]}</span>
+                  )}
+                </DescItem>
                 <DescItem label="Người tải lên">{evidence.uploadedBy?.fullName ?? "—"}</DescItem>
                 <DescItem label="Người duyệt">
                   {evidence.approvedBy ? `${evidence.approvedBy.fullName} · ${formatDate(evidence.approvedAt)}` : "—"}

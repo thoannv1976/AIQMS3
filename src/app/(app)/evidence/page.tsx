@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { Plus, FileText, Sparkles } from "lucide-react";
+import { Plus, FileText, Sparkles, FileSpreadsheet } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { can } from "@/lib/rbac";
-import { resolveProgram } from "@/lib/program-context";
+import { canInProgram } from "@/lib/rbac";
+import { resolveProgram, programRolesOf } from "@/lib/program-context";
 import { ProgramSwitcher } from "@/components/program-switcher";
 import { Card, LinkButton, PageHeader, Badge, EmptyState, Th, Td } from "@/components/ui";
 import { evidenceStatus, confidentiality as confMeta } from "@/lib/labels";
@@ -13,6 +13,9 @@ export default async function EvidencePage({ searchParams }: { searchParams: Pro
   const user = await requireUser();
   const sp = await searchParams;
   const { programs, selected } = await resolveProgram(sp.program);
+  const canWrite = selected
+    ? canInProgram(user.role, await programRolesOf(user.id, selected.id), "evidence:write")
+    : false;
 
   const evidence = selected
     ? await prisma.evidence.findMany({
@@ -30,7 +33,15 @@ export default async function EvidencePage({ searchParams }: { searchParams: Pro
         actions={
           <div className="flex items-center gap-3">
             <ProgramSwitcher programs={programs} selectedId={selected?.id} />
-            {selected && can(user.role, "evidence:write") && (
+            {selected && evidence.length > 0 && (
+              <a
+                href={`/evidence/export?program=${selected.id}`}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                <FileSpreadsheet className="h-4 w-4" /> Xuất Excel
+              </a>
+            )}
+            {selected && canWrite && (
               <LinkButton href={`/evidence/new?program=${selected.id}`}>
                 <Plus className="h-4 w-4" /> Tải minh chứng
               </LinkButton>
@@ -46,7 +57,7 @@ export default async function EvidencePage({ searchParams }: { searchParams: Pro
           title="Chưa có minh chứng"
           description="Tải lên minh chứng đầu tiên cho chương trình này."
           action={
-            can(user.role, "evidence:write") ? (
+            canWrite ? (
               <LinkButton href={`/evidence/new?program=${selected.id}`}>
                 <Plus className="h-4 w-4" /> Tải minh chứng
               </LinkButton>

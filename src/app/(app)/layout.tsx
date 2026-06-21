@@ -3,13 +3,18 @@ import { Sidebar } from "@/components/sidebar";
 import { Topbar } from "@/components/topbar";
 import { NAV_GROUPS } from "@/lib/nav";
 import { can } from "@/lib/rbac";
+import { getLocale } from "@/lib/i18n";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
+  const locale = await getLocale();
 
   const groups = NAV_GROUPS.map((g) => ({
     ...g,
-    items: g.items.filter((i) => can(user.role, i.capability)),
+    title: locale === "en" ? g.titleEn : g.title,
+    items: g.items
+      .filter((i) => can(user.role, i.capability))
+      .map((i) => ({ ...i, label: locale === "en" ? i.labelEn : i.label })),
   })).filter((g) => g.items.length > 0);
 
   return (
