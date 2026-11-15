@@ -1,3 +1,4 @@
+import { Confidentiality, EvidenceStatus } from "@/generated/prisma/enums";
 import { prisma } from "../db";
 import { aiComplete, type AiResult, type AiMeta } from "./client";
 import { cosineSimilarity, embedText, tokenize } from "./embeddings";
@@ -228,13 +229,36 @@ export interface RetrievedChunk {
   score: number;
 }
 
-export async function ragRetrieve(programId: string, question: string, k = 5): Promise<RetrievedChunk[]> {
+/** Access filter applied to RAG retrieval (confidentiality + evidence status). */
+export interface RagAccess {
+  confidentiality?: Confidentiality[];
+  statuses?: EvidenceStatus[];
+}
+
+export async function ragRetrieve(programId: string, question: string, k = 5, access?: RagAccess): Promise<RetrievedChunk[]> {
   const qv = embedText(question);
+  const restricted = Boolean(access?.confidentiality || access?.statuses);
 
   // Fast path: vector search in Postgres (pgvector) — scales to very large corpora.
   if (pgVectorEnabled()) {
     try {
-      const hits = await searchSimilar(programId, qv, k);
+      let hits = await searchSimilar(programId, qv, restricted ? k * 4 : k);
+      if (restricted) {
+        const ids = [...new Set(hits.map((h) => h.evidenceId).filter((x): x is string => Boolean(x)))];
+        const ok = new Set(
+          (
+            await prisma.evidence.findMany({
+              where: {
+                id: { in: ids },
+                ...(access?.confidentiality ? { confidentiality: { in: access.confidentiality } } : {}),
+                ...(access?.statuses ? { status: { in: access.statuses } } : {}),
+              },
+              select: { id: true },
+            })
+          ).map((e) => e.id),
+        );
+        hits = hits.filter((h) => h.evidenceId && ok.has(h.evidenceId)).slice(0, k);
+      }
       const filtered = hits.filter((c) => c.score > 0.02);
       if (filtered.length) return filtered;
       // Empty (e.g. vectors not backfilled yet) → fall through to the in-app path.
@@ -245,7 +269,19 @@ export async function ragRetrieve(programId: string, question: string, k = 5): P
 
   // Fallback: in-app cosine over the Float[] embeddings (works without pgvector).
   const chunks = await prisma.documentChunk.findMany({
-    where: { document: { programId } },
+    where: {
+      document: {
+        programId,
+        ...(restricted
+          ? {
+              evidence: {
+                ...(access?.confidentiality ? { confidentiality: { in: access.confidentiality } } : {}),
+                ...(access?.statuses ? { status: { in: access.statuses } } : {}),
+              },
+            }
+          : {}),
+      },
+    },
     select: {
       content: true,
       embedding: true,
@@ -270,10 +306,22 @@ export async function ragAnswer(
   programId: string,
   question: string,
   meta?: AiMeta,
+  access?: RagAccess,
 ): Promise<AiResult & { citations: RetrievedChunk[] }> {
-  const top = await ragRetrieve(programId, question, 5);
+  // Retrieve more chunks, then group by evidence so each source is cited once.
+  const raw = await ragRetrieve(programId, question, 10, access);
+  const groups: RetrievedChunk[] = [];
+  for (const c of raw) {
+    const g = groups.find((x) => x.evidenceId && x.evidenceId === c.evidenceId);
+    if (g) {
+      if (g.content.length < 1400) g.content += `\n…\n${c.content}`;
+    } else if (groups.length < 5) {
+      groups.push({ ...c });
+    }
+  }
+  const top = groups;
   const context = top
-    .map((c, i) => `[${i + 1}] (Minh chứng ${c.evidenceCode ?? "?"}: ${c.evidenceTitle ?? "?"})\n${truncate(c.content, 800)}`)
+    .map((c, i) => `[${i + 1}] (Minh chứng ${c.evidenceCode ?? "?"}: ${c.evidenceTitle ?? "?"})\n${truncate(c.content, 1400)}`)
     .join("\n\n");
 
   const result = await aiComplete({

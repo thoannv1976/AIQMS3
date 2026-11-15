@@ -1,6 +1,62 @@
 import { prisma } from "../db";
 import { chunkText, embedText } from "./embeddings";
 import { indexDocumentVectors, pgVectorEnabled } from "./vector";
+import { aiTranscribe, imageMediaType, OCR_MAX_PAGES } from "./ocr";
+
+/** Minimum characters of real text before a PDF counts as having a text layer. */
+const MIN_TEXT_CHARS = 80;
+
+async function extractPptx(buffer: Buffer): Promise<string> {
+  const { default: JSZip } = await import("jszip");
+  const zip = await JSZip.loadAsync(buffer);
+  const slideNo = (n: string) => Number(n.match(/(\d+)\.xml$/)?.[1] ?? 0);
+  const slides = Object.keys(zip.files)
+    .filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n))
+    .sort((a, b) => slideNo(a) - slideNo(b));
+  const out: string[] = [];
+  for (const name of slides) {
+    const xml = await zip.files[name].async("string");
+    const texts = [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map((m) => m[1]);
+    const decoded = texts.join(" ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"');
+    out.push(`# Slide ${slideNo(name)}\n${decoded}`);
+  }
+  return out.join("\n\n");
+}
+
+async function pdfPageCount(buffer: Buffer): Promise<number> {
+  try {
+    const { getDocumentProxy } = await import("unpdf");
+    const pdf = await getDocumentProxy(new Uint8Array(buffer));
+    return pdf.numPages;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Extract text; for images, or PDFs without a text layer (scans), fall back to Claude OCR.
+ * Returns the text plus whether OCR was used.
+ */
+export async function extractTextWithOcr(
+  buffer: Buffer,
+  fileType: string | undefined,
+  fileName: string,
+): Promise<{ text: string; ocr: boolean }> {
+  if (imageMediaType(fileName)) {
+    const text = await aiTranscribe(buffer, fileName, "image");
+    return { text, ocr: Boolean(text) };
+  }
+  const text = await extractText(buffer, fileType, fileName);
+  const isPdf = (fileType || "").includes("pdf") || fileName.toLowerCase().endsWith(".pdf");
+  if (isPdf && text.replace(/\s+/g, "").length < MIN_TEXT_CHARS) {
+    const pages = await pdfPageCount(buffer);
+    if (pages > 0 && pages <= OCR_MAX_PAGES) {
+      const ocrText = await aiTranscribe(buffer, fileName, "pdf");
+      if (ocrText) return { text: ocrText, ocr: true };
+    }
+  }
+  return { text, ocr: false };
+}
 
 // Extract plain text from common evidence file types. All parsers are dynamically
 // imported so they only load on the server when actually needed.
@@ -27,6 +83,9 @@ export async function extractText(buffer: Buffer, fileType: string | undefined, 
         out += `# ${sheetName}\n${XLSX.utils.sheet_to_csv(wb.Sheets[sheetName])}\n\n`;
       }
       return out;
+    }
+    if (name.endsWith(".pptx") || type.includes("presentation")) {
+      return await extractPptx(buffer);
     }
     if (name.endsWith(".txt") || name.endsWith(".md") || name.endsWith(".csv") || type.startsWith("text/")) {
       return buffer.toString("utf-8");
@@ -82,8 +141,15 @@ export async function processEvidenceDocument(opts: {
   buffer: Buffer;
   fileName: string;
   fileType?: string;
-}): Promise<{ documentId: string; chunkCount: number; text: string }> {
-  const text = await extractText(opts.buffer, opts.fileType, opts.fileName);
+}): Promise<{ documentId: string; chunkCount: number; text: string; ocr: boolean }> {
+  const { text, ocr } = await extractTextWithOcr(opts.buffer, opts.fileType, opts.fileName);
+  if (ocr) {
+    await prisma.aiAnalysisResult
+      .create({
+        data: { type: "OCR", targetType: "evidence", targetId: opts.evidenceId, result: `Đã OCR ${text.length} ký tự từ ${opts.fileName}` },
+      })
+      .catch(() => {});
+  }
 
   const document = await prisma.document.upsert({
     where: { evidenceId: opts.evidenceId },
@@ -124,5 +190,5 @@ export async function processEvidenceDocument(opts: {
   }
 
   await prisma.document.update({ where: { id: document.id }, data: { status: DOC_STATUS.READY } });
-  return { documentId: document.id, chunkCount: chunks.length, text };
+  return { documentId: document.id, chunkCount: chunks.length, text, ocr };
 }

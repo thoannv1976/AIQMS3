@@ -1,8 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { uploadEvidence, type FormState } from "../actions";
 import { Button, Input, Label, Select, Textarea, LinkButton } from "@/components/ui";
+
+const ACCEPT = ".pdf,.docx,.xlsx,.xls,.pptx,.txt,.md,.csv,.png,.jpg,.jpeg,.webp";
 
 export function UploadForm({
   programId,
@@ -20,7 +23,7 @@ export function UploadForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor="code">Mã minh chứng *</Label>
-          <Input id="code" name="code" placeholder="VD: E-1.1-02" required />
+          <Input id="code" name="code" placeholder="VD: MC-1.1.01" required />
         </div>
         <div>
           <Label htmlFor="providerUnit">Đơn vị cung cấp</Label>
@@ -61,21 +64,52 @@ export function UploadForm({
         </div>
       </div>
 
-      <div>
-        <Label htmlFor="file">Tệp minh chứng (PDF, DOCX, XLSX, TXT)</Label>
-        <Input id="file" name="file" type="file" accept=".pdf,.docx,.xlsx,.xls,.txt,.md,.csv" className="h-auto py-1.5" />
-        <p className="mt-1 text-xs text-slate-400">Hệ thống sẽ tự trích xuất nội dung để AI tóm tắt và gợi ý tiêu chí.</p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <Label htmlFor="issuedAt">Ngày ban hành</Label>
+          <Input id="issuedAt" name="issuedAt" type="date" />
+        </div>
+        <div>
+          <Label htmlFor="validUntil">Hiệu lực đến</Label>
+          <Input id="validUntil" name="validUntil" type="date" />
+          <p className="mt-1 text-xs text-slate-400">Để trống nếu không có thời hạn.</p>
+        </div>
       </div>
 
-      {state.error && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{state.error}</div>}
+      <div>
+        <Label htmlFor="file">Tệp minh chứng (PDF, DOCX, XLSX, PPTX, ảnh JPG/PNG, TXT)</Label>
+        <Input id="file" name="file" type="file" accept={ACCEPT} className="h-auto py-1.5" />
+        <p className="mt-1 text-xs text-slate-400">
+          Hệ thống tự trích xuất nội dung; bản scan PDF và ảnh được AI đọc (OCR) để tóm tắt và gợi ý tiêu chí.
+        </p>
+      </div>
 
-      <div className="flex gap-2">
+      {state.error && (
+        <div className="space-y-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div>{state.error}</div>
+          {state.duplicate && (
+            <>
+              <Link href={`/evidence/${state.duplicate.id}`} className="font-medium underline" target="_blank">
+                Mở minh chứng {state.duplicate.code}
+              </Link>
+              <label className="flex items-center gap-2 text-slate-700">
+                <input type="checkbox" name="force" /> Vẫn tải lên (tệp trùng nội dung)
+              </label>
+            </>
+          )}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
         <Button type="submit" disabled={pending}>
           {pending ? "Đang tải lên…" : "Tải lên minh chứng"}
         </Button>
         <LinkButton href={`/evidence?program=${programId}`} variant="outline">
           Hủy
         </LinkButton>
+        <Link href={`/evidence/bulk?program=${programId}`} className="ml-auto text-sm text-brand-600 hover:underline">
+          Tải nhiều tệp cùng lúc →
+        </Link>
       </div>
     </form>
   );

@@ -26,6 +26,8 @@ export async function resolveProgram(
       select: { programId: true },
     });
     if (assigned.length > 0) programIds = [...new Set(assigned.map((a) => a.programId))];
+    // Guest reviewers never fall back to "all programs".
+    else if (user.role === "EXTERNAL_REVIEWER") programIds = [];
   }
 
   const programs = await prisma.program.findMany({

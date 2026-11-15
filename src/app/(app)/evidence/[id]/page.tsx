@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { X, FileText, Download, RefreshCw } from "lucide-react";
+import { X, FileText, Download, RefreshCw, Lock, Unlock, Copy, ScanText, History } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { canInProgram } from "@/lib/rbac";
@@ -11,7 +11,13 @@ import { evidenceStatus, confidentiality as confMeta, documentStatus } from "@/l
 import { evidenceStrength, BAND_META } from "@/lib/quality/scoring";
 import { formatDate, formatBytes } from "@/lib/utils";
 import { AiPanel, StatusControl } from "./EvidenceActions";
-import { unlinkCriterionAction, linkCriterionForm, reprocessEvidenceAction } from "../actions";
+import { unlinkCriterionAction, linkCriterionForm, reprocessEvidenceAction, setEvidenceLockAction, updateEvidenceValidityAction } from "../actions";
+import { NewVersionForm } from "./NewVersionForm";
+import { canSeeEvidence, validityState } from "@/lib/access";
+import { findProgramDuplicates } from "@/lib/evidence/duplicates";
+import { logAudit } from "@/lib/audit";
+import { Input } from "@/components/ui";
+import { Role } from "@/generated/prisma/enums";
 
 export default async function EvidenceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -26,9 +32,22 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
       approvedBy: true,
       cycle: { include: { standardSet: { include: { standards: { orderBy: { order: "asc" }, include: { criteria: { orderBy: { order: "asc" } } } } } } } },
       criterionLinks: { include: { criterion: { include: { standard: true } } } },
+      lockedBy: { select: { fullName: true } },
+      fileVersions: { orderBy: { createdAt: "desc" }, include: { uploadedBy: { select: { fullName: true } } } },
     },
   });
   if (!evidence) notFound();
+  if (!(await canSeeEvidence(user, evidence))) notFound();
+  if (user.role === Role.EXTERNAL_REVIEWER) {
+    await logAudit({ userId: user.id, action: "VIEW", entityType: "Evidence", entityId: evidence.id, detail: { code: evidence.code } });
+  }
+  const [dupMap, ocrRun] = await Promise.all([
+    findProgramDuplicates(evidence.programId),
+    prisma.aiAnalysisResult.findFirst({ where: { type: "OCR", targetType: "evidence", targetId: evidence.id }, orderBy: { createdAt: "desc" } }),
+  ]);
+  const duplicates = dupMap.get(evidence.id) ?? [];
+  const validity = validityState(evidence.validUntil);
+  const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
 
   const allCriteria = evidence.cycle
     ? evidence.cycle.standardSet.standards.flatMap((s) => s.criteria)
@@ -37,8 +56,9 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
   const linkableCriteria = allCriteria.filter((c) => !linkedIds.has(c.id));
 
   const programRoles = await programRolesOf(user.id, evidence.programId);
-  const canWrite = canInProgram(user.role, programRoles, "evidence:write");
-  const canApprove = canInProgram(user.role, programRoles, "evidence:approve");
+  const canApproveRole = canInProgram(user.role, programRoles, "evidence:approve");
+  const canWrite = canInProgram(user.role, programRoles, "evidence:write") && !evidence.locked;
+  const canApprove = canApproveRole && !evidence.locked;
 
   const strength = evidenceStrength({
     status: evidence.status,
@@ -46,6 +66,7 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
     isMachineReadable: (evidence.document?._count.chunks ?? 0) > 0,
     hasSummary: Boolean(evidence.document?.summary),
     criterionLinkCount: evidence.criterionLinks.length,
+    expired: validity === "expired",
   });
 
   return (
@@ -53,7 +74,18 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
       <PageHeader
         title={`${evidence.code} — ${evidence.title}`}
         description={`Minh chứng · ${evidence.program.code}`}
-        actions={<Badge color={evidenceStatus[evidence.status].color}>{evidenceStatus[evidence.status].label}</Badge>}
+        actions={
+          <div className="flex items-center gap-2">
+            {evidence.locked && (
+              <Badge color="slate">
+                <Lock className="mr-1 inline h-3 w-3" /> Đã khóa phiên bản {evidence.version}
+              </Badge>
+            )}
+            {validity === "expired" && <Badge color="red">Hết hiệu lực</Badge>}
+            {validity === "expiring" && <Badge color="amber">Sắp hết hạn</Badge>}
+            <Badge color={evidenceStatus[evidence.status].color}>{evidenceStatus[evidence.status].label}</Badge>
+          </div>
+        }
       />
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -99,7 +131,25 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
                     "Không có tệp"
                   )}
                 </DescItem>
-                <DescItem label="Phiên bản">{evidence.version}</DescItem>
+                <DescItem label="Phiên bản">
+                  {evidence.version}
+                  {evidence.locked && (
+                    <span className="block text-xs text-slate-500">
+                      Khóa bởi {evidence.lockedBy?.fullName ?? "—"} · {formatDate(evidence.lockedAt)}
+                    </span>
+                  )}
+                </DescItem>
+                <DescItem label="Ngày ban hành">{evidence.issuedAt ? formatDate(evidence.issuedAt) : "—"}</DescItem>
+                <DescItem label="Hiệu lực đến">
+                  {evidence.validUntil ? (
+                    <span className={validity === "expired" ? "font-medium text-red-600" : validity === "expiring" ? "font-medium text-amber-700" : ""}>
+                      {formatDate(evidence.validUntil)}
+                      {validity === "expired" ? " (đã hết hiệu lực)" : validity === "expiring" ? " (sắp hết hạn)" : ""}
+                    </span>
+                  ) : (
+                    "Không thời hạn"
+                  )}
+                </DescItem>
                 {evidence.document && (
                   <DescItem label="Trạng thái xử lý">
                     <span className="inline-flex items-center gap-2">
@@ -108,6 +158,11 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
                       </Badge>
                       {evidence.document.status === "READY" && (
                         <span className="text-xs text-slate-400">{evidence.document._count.chunks} đoạn RAG</span>
+                      )}
+                      {ocrRun && (
+                        <Badge color="purple">
+                          <ScanText className="mr-0.5 inline h-3 w-3" /> Đã OCR bằng AI
+                        </Badge>
                       )}
                     </span>
                   </DescItem>
@@ -128,6 +183,80 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
                 </DescItem>
               </dl>
               {evidence.description && <p className="mt-2 text-sm text-slate-600">{evidence.description}</p>}
+              {canWrite && (
+                <form action={updateEvidenceValidityAction.bind(null, evidence.id)} className="mt-3 flex flex-wrap items-end gap-2 border-t border-slate-100 pt-3">
+                  <label className="text-xs text-slate-500">
+                    Ngày ban hành
+                    <Input type="date" name="issuedAt" defaultValue={iso(evidence.issuedAt)} className="h-8 w-40" />
+                  </label>
+                  <label className="text-xs text-slate-500">
+                    Hiệu lực đến
+                    <Input type="date" name="validUntil" defaultValue={iso(evidence.validUntil)} className="h-8 w-40" />
+                  </label>
+                  <Button type="submit" size="sm" variant="outline">
+                    Lưu hiệu lực
+                  </Button>
+                </form>
+              )}
+              {duplicates.length > 0 && (
+                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  <Copy className="mr-1 inline h-4 w-4" />
+                  Có thể trùng với:{" "}
+                  {duplicates.map((d, i) => (
+                    <span key={d.id}>
+                      {i > 0 && ", "}
+                      <Link href={`/evidence/${d.id}`} className="font-medium underline">
+                        {d.code}
+                      </Link>{" "}
+                      ({d.kind === "checksum" ? "cùng tệp" : `nội dung giống ${Math.round(d.similarity * 100)}%`})
+                    </span>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex items-center justify-between">
+              <CardTitle>
+                <History className="mr-1 inline h-4 w-4" /> Phiên bản tệp ({evidence.fileVersions.length + 1})
+              </CardTitle>
+              {canApproveRole && (
+                <form action={setEvidenceLockAction.bind(null, evidence.id, !evidence.locked)}>
+                  <Button type="submit" size="sm" variant={evidence.locked ? "outline" : "secondary"}>
+                    {evidence.locked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                    {evidence.locked ? "Mở khóa phiên bản" : "Khóa phiên bản"}
+                  </Button>
+                </form>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                <span>
+                  <b>v{evidence.version}</b> (hiện hành) · {evidence.fileName ?? "không có tệp"}
+                </span>
+                <span className="text-xs text-slate-500">{formatDate(evidence.updatedAt)}</span>
+              </div>
+              {evidence.fileVersions.map((fv) => (
+                <div key={fv.id} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
+                  <span>
+                    v{fv.version} · {fv.fileName ?? "—"} {fv.note && <span className="text-xs text-slate-500">— {fv.note}</span>}
+                  </span>
+                  <span className="flex items-center gap-3 text-xs text-slate-500">
+                    {fv.uploadedBy?.fullName ?? ""} · {formatDate(fv.createdAt)}
+                    {fv.storagePath && (
+                      <a href={`/evidence/${evidence.id}/versions/${fv.id}`} className="inline-flex items-center gap-1 text-brand-600 hover:underline">
+                        <Download className="h-3.5 w-3.5" /> Tải
+                      </a>
+                    )}
+                  </span>
+                </div>
+              ))}
+              {canWrite ? (
+                <NewVersionForm evidenceId={evidence.id} />
+              ) : (
+                evidence.locked && <p className="text-xs text-slate-500">Phiên bản đã khóa: không sửa thông tin, không thay tệp cho đến khi được mở khóa.</p>
+              )}
             </CardContent>
           </Card>
 

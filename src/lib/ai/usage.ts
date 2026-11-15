@@ -57,6 +57,10 @@ export const FEATURE_LABELS: Record<string, string> = {
   curriculum_check: "Kiểm tra logic CTĐT",
   external_response: "Soạn giải trình đánh giá ngoài",
   connection_test: "Kiểm tra kết nối",
+  ocr: "OCR bản scan / ảnh",
+  interview_questions: "Gợi ý câu hỏi phỏng vấn",
+  leadership_brief: "Nhận định cho lãnh đạo",
+  bulk_classify: "AI phân loại hàng loạt",
   other: "Khác",
 };
 

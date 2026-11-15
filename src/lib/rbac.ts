@@ -85,6 +85,17 @@ const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
   LIBRARY: [...VIEW_ALL, "evidence:write"],
   IT_CENTER: [...VIEW_ALL, "evidence:write"],
   STUDENT_AFFAIRS: [...VIEW_ALL, "evidence:write", "survey:write"],
+  // Đánh giá viên ngoài: chỉ xem hồ sơ của chương trình được gán, không dùng AI, không sửa.
+  EXTERNAL_REVIEWER: [
+    "dashboard:view",
+    "program:view",
+    "standard:view",
+    "outcome:view",
+    "syllabus:view",
+    "evidence:view",
+    "report:view",
+    "improvement:view",
+  ],
 };
 
 export function can(role: Role, capability: Capability): boolean {
@@ -126,6 +137,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   LIBRARY: "Thư viện",
   IT_CENTER: "Trung tâm CNTT",
   STUDENT_AFFAIRS: "Phòng Công tác sinh viên",
+  EXTERNAL_REVIEWER: "Đánh giá viên ngoài",
 };
 
 export function roleLabel(role: Role): string {
