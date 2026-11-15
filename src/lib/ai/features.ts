@@ -535,3 +535,66 @@ Cấu trúc giải trình: (1) tiếp thu/làm rõ khuyến nghị; (2) hiện t
       `4. Mốc thời gian: hoàn thành trong học kỳ tới; bổ sung minh chứng sau cải tiến.`,
   });
 }
+
+// ---------------------------------------------------------------------------
+// 14. Suggested interview questions for the external review panel
+// ---------------------------------------------------------------------------
+export async function suggestInterviewQuestions(
+  input: {
+    programName: string;
+    standardSet: string;
+    sections: Array<{ title: string; weaknesses?: string | null; content?: string | null; evidenceCount: number }>;
+  },
+  meta?: AiMeta,
+): Promise<AiResult> {
+  const sectionText = input.sections
+    .map(
+      (s) =>
+        `- ${s.title} | minh chứng: ${s.evidenceCount}` +
+        (s.weaknesses ? ` | tồn tại: ${truncate(s.weaknesses, 200)}` : "") +
+        (s.content ? ` | hiện trạng: ${truncate(s.content, 220)}` : " | (chưa viết)"),
+    )
+    .join("\n");
+  return aiComplete({
+    feature: "interview_questions",
+    userId: meta?.userId,
+    system: SYSTEM_QA,
+    maxTokens: 2500,
+    prompt: `Chương trình: ${input.programName}. Bộ tiêu chuẩn: ${input.standardSet}.
+Dưới đây là tóm tắt báo cáo tự đánh giá theo từng mục (kèm số minh chứng và tồn tại):
+${sectionText}
+
+Hãy đóng vai đoàn đánh giá ngoài và soạn BỘ CÂU HỎI PHỎNG VẤN dự kiến, ưu tiên các mục có tồn tại, ít minh chứng hoặc chưa viết.
+Nhóm theo đối tượng: (1) Lãnh đạo nhà trường/khoa; (2) Giảng viên; (3) Người học; (4) Cựu người học; (5) Nhà tuyển dụng/đối tác; (6) Cán bộ hỗ trợ.
+Mỗi nhóm 4–6 câu; mỗi câu ghi tiêu chí liên quan trong ngoặc và "Minh chứng nên chuẩn bị: …".
+Kết thúc bằng 3–5 lưu ý chuẩn bị cho đơn vị. Định dạng Markdown, tiếng Việt.`,
+    fallback: () =>
+      `# Bộ câu hỏi phỏng vấn dự kiến (bản quy tắc — chưa bật AI)\n\n` +
+      input.sections
+        .filter((s) => s.weaknesses || s.evidenceCount === 0 || !s.content)
+        .slice(0, 12)
+        .map((s) => `- (${s.title}) Đơn vị đã thực hiện nội dung này như thế nào? Minh chứng nào thể hiện? Minh chứng nên chuẩn bị: các văn bản, số liệu liên quan.`)
+        .join("\n"),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 15. Leadership brief for the quality dashboard
+// ---------------------------------------------------------------------------
+export async function leadershipBrief(metricsText: string, meta?: AiMeta): Promise<AiResult> {
+  return aiComplete({
+    feature: "leadership_brief",
+    userId: meta?.userId,
+    system: SYSTEM_QA,
+    maxTokens: 1500,
+    prompt: `Số liệu quản trị chất lượng hiện tại:
+${metricsText}
+
+Viết NHẬN ĐỊNH CHO LÃNH ĐẠO (Markdown, tiếng Việt, tối đa ~350 từ):
+1. Bức tranh chung (2–3 câu, nêu số liệu).
+2. Xu hướng/điểm đáng chú ý (so sánh giữa các chương trình/khoa, hoạt động 30 ngày gần đây).
+3. 3–5 việc ưu tiên cụ thể (ai làm, làm gì, vì sao) — ưu tiên tiêu chí điều kiện, minh chứng hết hiệu lực, việc quá hạn.
+Chỉ dựa trên số liệu được cung cấp, không bịa số liệu.`,
+    fallback: () => `**Nhận định (bản quy tắc — chưa bật AI)**\n\n${metricsText}`,
+  });
+}

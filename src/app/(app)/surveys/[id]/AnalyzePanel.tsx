@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Sparkles } from "lucide-react";
 import { Button, Badge } from "@/components/ui";
 import { analyzeSurveyAction } from "../actions";
+import { Markdown } from "@/components/markdown";
 
 export function AnalyzePanel({ surveyId }: { surveyId: string }) {
   const [pending, start] = useTransition();
@@ -24,7 +25,7 @@ export function AnalyzePanel({ surveyId }: { surveyId: string }) {
           <div className="mb-1 flex items-center gap-2 text-xs font-medium text-slate-500">
             Kết quả {result.usedFallback && <Badge color="amber">chế độ dự phòng</Badge>}
           </div>
-          <p className="prose-ai text-slate-700">{result.text}</p>
+          <Markdown text={result.text ?? ""} />
         </div>
       )}
     </div>

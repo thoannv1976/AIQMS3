@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Sparkles } from "lucide-react";
 import { Button, Badge } from "@/components/ui";
 import { curriculumReviewAction } from "./actions";
+import { Markdown } from "@/components/markdown";
 
 export function CurriculumReviewPanel({ programId }: { programId: string }) {
   const [pending, start] = useTransition();
@@ -30,7 +31,7 @@ export function CurriculumReviewPanel({ programId }: { programId: string }) {
           <div className="mb-1 flex items-center gap-2 text-xs font-medium text-slate-500">
             Nhận định {result.usedFallback && <Badge color="amber">chế độ dự phòng</Badge>}
           </div>
-          <p className="prose-ai whitespace-pre-wrap text-sm text-slate-700">{result.text}</p>
+          <Markdown text={result.text ?? ""} />
         </div>
       )}
     </div>

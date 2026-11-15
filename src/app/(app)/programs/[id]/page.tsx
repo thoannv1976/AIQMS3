@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle, Badge, PageHeader, LinkButton
 import { StatCard, DescItem } from "@/components/widgets";
 import { degreeLevel, programVersionStatus, cycleStatus } from "@/lib/labels";
 import { formatDate } from "@/lib/utils";
+import { allowedProgramIds, canAccessProgram } from "@/lib/access";
 
 export default async function ProgramDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -33,7 +34,7 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
       },
     },
   });
-  if (!program) notFound();
+  if (!program || !(await canAccessProgram(user, program.id))) notFound();
 
   const [stats, teamRoles, standardSets] = await Promise.all([
     getProgramStats(program.id),

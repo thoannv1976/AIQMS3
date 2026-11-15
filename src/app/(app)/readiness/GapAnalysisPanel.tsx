@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Sparkles } from "lucide-react";
 import { Button, Badge } from "@/components/ui";
 import { criterionGapAnalysisAction } from "./actions";
+import { Markdown } from "@/components/markdown";
 
 export function GapAnalysisPanel({ programId, criterionId }: { programId: string; criterionId: string }) {
   const [pending, start] = useTransition();
@@ -26,7 +27,7 @@ export function GapAnalysisPanel({ programId, criterionId }: { programId: string
           <div className="mb-1 flex items-center gap-2 text-xs font-medium text-slate-500">
             Phân tích khoảng trống {result.usedFallback && <Badge color="amber">chế độ dự phòng</Badge>}
           </div>
-          <p className="prose-ai whitespace-pre-wrap text-sm text-slate-700">{result.text}</p>
+          <Markdown text={result.text ?? ""} />
         </div>
       )}
     </div>

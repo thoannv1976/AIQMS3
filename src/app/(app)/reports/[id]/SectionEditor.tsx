@@ -8,6 +8,8 @@ import { Progress } from "@/components/widgets";
 import { reportSectionStatus } from "@/lib/labels";
 import { saveSectionAction, draftSectionAction, reviewSectionAction, reviewSectionAdvancedAction, assignSectionAction } from "../actions";
 import type { AdvancedReviewResult } from "../actions";
+import { SectionTools } from "./SectionTools";
+import { Markdown } from "@/components/markdown";
 import { ReportSectionStatus } from "@/generated/prisma/enums";
 
 const BAND_COLOR: Record<string, BadgeColor> = { strong: "green", adequate: "blue", weak: "amber", missing: "red" };
@@ -42,7 +44,7 @@ export function SectionEditor({ section, canWrite, users }: { section: SectionDa
   const [status, setStatus] = useState<ReportSectionStatus>(section.status);
 
   const [pending, start] = useTransition();
-  const [draft, setDraft] = useState<{ text: string; usedFallback: boolean } | null>(null);
+  const [draft, setDraft] = useState<{ text: string; usedFallback: boolean; excluded?: string[] } | null>(null);
   const [review, setReview] = useState<{ text: string; usedFallback: boolean } | null>(null);
   const [adv, setAdv] = useState<AdvancedReviewResult | null>(null);
   const [saved, setSaved] = useState(false);
@@ -153,7 +155,7 @@ export function SectionEditor({ section, canWrite, users }: { section: SectionDa
                   </li>
                 ))}
               </ul>
-              <p className="prose-ai mt-3 whitespace-pre-wrap border-t border-slate-100 pt-3 text-sm text-slate-700">{adv.text}</p>
+              <div className="mt-3 border-t border-slate-100 pt-3"><Markdown text={adv.text} /></div>
             </div>
           )}
 
@@ -167,7 +169,12 @@ export function SectionEditor({ section, canWrite, users }: { section: SectionDa
                   Áp dụng vào nội dung
                 </Button>
               </div>
-              <p className="prose-ai text-slate-700">{draft.text}</p>
+              {draft.excluded && draft.excluded.length > 0 && (
+                <p className="mb-2 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">
+                  AI chỉ dùng minh chứng đã duyệt, còn hiệu lực. Không dùng: {draft.excluded.join(", ")} — cần duyệt/cập nhật trước khi trích dẫn.
+                </p>
+              )}
+              <Markdown text={draft.text} />
             </div>
           )}
 
@@ -176,9 +183,20 @@ export function SectionEditor({ section, canWrite, users }: { section: SectionDa
               <span className="text-xs font-medium text-slate-500">
                 Kết quả rà soát {review.usedFallback && <Badge color="amber">dự phòng</Badge>}
               </span>
-              <p className="prose-ai mt-1 text-slate-700">{review.text}</p>
+              <Markdown text={review.text} className="mt-1" />
             </div>
           )}
+
+          <SectionTools
+            sectionId={section.id}
+            current={{ content, strengths, weaknesses, improvementPlan }}
+            onRestore={(f) => {
+              setContent(f.content);
+              setStrengths(f.strengths);
+              setWeaknesses(f.weaknesses);
+              setImprovementPlan(f.improvementPlan);
+            }}
+          />
 
           <div>
             <Label>Mô tả hiện trạng & phân tích</Label>

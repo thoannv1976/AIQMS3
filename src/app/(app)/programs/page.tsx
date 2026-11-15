@@ -7,10 +7,13 @@ import { getProgramStats } from "@/lib/metrics";
 import { Card, LinkButton, PageHeader, Badge, EmptyState, Th, Td } from "@/components/ui";
 import { Progress } from "@/components/widgets";
 import { degreeLevel as degreeLabel } from "@/lib/labels";
+import { allowedProgramIds, canAccessProgram } from "@/lib/access";
 
 export default async function ProgramsPage() {
   const user = await requireUser();
+  const scope = await allowedProgramIds(user);
   const programs = await prisma.program.findMany({
+    where: scope ? { id: { in: scope } } : undefined,
     include: { faculty: true, _count: { select: { courses: true, plos: true, evidence: true } } },
     orderBy: { createdAt: "asc" },
   });

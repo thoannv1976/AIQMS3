@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Send, Sparkles, FileText, User } from "lucide-react";
 import { Button, Badge } from "@/components/ui";
 import { askAction, type AskResult } from "./actions";
+import { Markdown } from "@/components/markdown";
 
 export interface Message {
   role: "user" | "assistant";
@@ -85,7 +86,7 @@ export function ChatBox({
               </div>
             )}
             <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${m.role === "user" ? "bg-brand-600 text-white" : "bg-slate-50 text-slate-800"}`}>
-              <p className="prose-ai">{m.text}</p>
+              <Markdown text={m.text ?? ""} />
               {m.usedFallback && (
                 <Badge color="amber" className="mt-2">
                   chế độ dự phòng (chưa bật Claude API)

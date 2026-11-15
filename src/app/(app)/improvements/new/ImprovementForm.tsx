@@ -4,6 +4,7 @@ import { useActionState, useState, useTransition } from "react";
 import { Sparkles } from "lucide-react";
 import { createImprovement, suggestImprovementAction, type FormState } from "../actions";
 import { Button, Input, Label, Select, Textarea, LinkButton, Badge } from "@/components/ui";
+import { Markdown } from "@/components/markdown";
 
 export function ImprovementForm({
   programId,
@@ -49,7 +50,7 @@ export function ImprovementForm({
               Dùng làm hành động
             </Button>
           </div>
-          <p className="prose-ai text-slate-700">{suggestion.text}</p>
+          <Markdown text={suggestion.text ?? ""} />
         </div>
       )}
 

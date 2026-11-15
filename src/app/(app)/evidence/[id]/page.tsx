@@ -18,6 +18,7 @@ import { findProgramDuplicates } from "@/lib/evidence/duplicates";
 import { logAudit } from "@/lib/audit";
 import { Input } from "@/components/ui";
 import { Role } from "@/generated/prisma/enums";
+import { Markdown } from "@/components/markdown";
 
 export default async function EvidenceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -266,7 +267,7 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
                 <CardTitle>Tóm tắt nội dung (đã trích xuất)</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="prose-ai text-slate-700">{evidence.document.summary}</p>
+                <Markdown text={evidence.document.summary ?? ""} />
                 <p className="mt-2 text-xs text-slate-400">
                   {evidence.document._count.chunks} đoạn văn bản đã lập chỉ mục cho hỏi đáp AI.
                 </p>

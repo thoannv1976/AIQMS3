@@ -11,6 +11,12 @@ import { pct } from "@/lib/utils";
 import { SectionEditor } from "./SectionEditor";
 import { setReportStatusAction } from "../actions";
 import { ApprovalPanel } from "../../approvals/ApprovalPanel";
+import { InterviewPanel } from "./InterviewPanel";
+import { freezeReportVersionAction } from "../actions";
+import { canAccessProgram } from "@/lib/access";
+import { Input } from "@/components/ui";
+import Link from "next/link";
+import { GitCompare } from "lucide-react";
 
 export default async function ReportDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -31,7 +37,11 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ i
       },
     },
   });
-  if (!report) notFound();
+  if (!report || !(await canAccessProgram(user, report.cycle.programId))) notFound();
+  const [versionCount, latestInterview] = await Promise.all([
+    prisma.reportVersion.count({ where: { reportId: id } }),
+    prisma.aiAnalysisResult.findFirst({ where: { type: "INTERVIEW_QUESTIONS", targetType: "report", targetId: id }, orderBy: { createdAt: "desc" } }),
+  ]);
 
   const links = await prisma.evidenceCriterionLink.groupBy({
     by: ["criterionId"],
@@ -99,6 +109,30 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ i
           )}
         </CardContent>
       </Card>
+
+      <div className="mb-6 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
+        <GitCompare className="h-4 w-4 text-slate-500" />
+        <span className="text-slate-600">
+          Đã chốt <b>{versionCount}</b> phiên bản.
+        </span>
+        <Link href={`/reports/${report.id}/versions`} className="text-brand-600 hover:underline">
+          Xem & so sánh phiên bản
+        </Link>
+        {canWrite && (
+          <form action={freezeReportVersionAction.bind(null, report.id)} className="ml-auto flex items-center gap-2">
+            <Input name="note" placeholder="Ghi chú (VD: bản gửi hội đồng)" className="h-8 w-60 text-xs" />
+            <Button type="submit" size="sm" variant="outline">
+              Chốt phiên bản v{versionCount + 1}
+            </Button>
+          </form>
+        )}
+      </div>
+
+      <InterviewPanel
+        reportId={report.id}
+        canUseAi={can(user.role, "ai:use")}
+        latest={latestInterview?.result ? { text: latestInterview.result, createdAt: latestInterview.createdAt.toISOString() } : null}
+      />
 
       <ApprovalPanel
         entityType="report"

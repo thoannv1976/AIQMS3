@@ -7,10 +7,13 @@ import { Progress } from "@/components/widgets";
 import { reportStatus } from "@/lib/labels";
 import { ReportSectionStatus } from "@/generated/prisma/enums";
 import { pct } from "@/lib/utils";
+import { allowedProgramIds, canAccessProgram } from "@/lib/access";
 
 export default async function ReportsPage() {
-  await requireUser();
+  const user = await requireUser();
+  const scope = await allowedProgramIds(user);
   const reports = await prisma.selfAssessmentReport.findMany({
+    where: scope ? { cycle: { programId: { in: scope } } } : undefined,
     include: {
       cycle: { include: { program: true } },
       sections: { select: { status: true } },
