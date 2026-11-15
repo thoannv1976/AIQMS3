@@ -10,6 +10,7 @@ import { saveSectionAction, draftSectionAction, reviewSectionAction, reviewSecti
 import type { AdvancedReviewResult } from "../actions";
 import { SectionTools } from "./SectionTools";
 import { Markdown } from "@/components/markdown";
+import { splitSarDraft } from "@/lib/sar/draft";
 import { ReportSectionStatus } from "@/generated/prisma/enums";
 
 const BAND_COLOR: Record<string, BadgeColor> = { strong: "green", adequate: "blue", weak: "amber", missing: "red" };
@@ -165,8 +166,18 @@ export function SectionEditor({ section, canWrite, users }: { section: SectionDa
                 <span className="text-xs font-medium text-slate-500">
                   Bản nháp AI {draft.usedFallback && <Badge color="amber">dự phòng</Badge>}
                 </span>
-                <Button size="sm" variant="outline" onClick={() => setContent(draft.text)}>
-                  Áp dụng vào nội dung
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const f = splitSarDraft(draft.text);
+                    setContent(f.content);
+                    if (f.strengths) setStrengths(f.strengths);
+                    if (f.weaknesses) setWeaknesses(f.weaknesses);
+                    if (f.improvementPlan) setImprovementPlan(f.improvementPlan);
+                  }}
+                >
+                  Áp dụng vào báo cáo
                 </Button>
               </div>
               {draft.excluded && draft.excluded.length > 0 && (

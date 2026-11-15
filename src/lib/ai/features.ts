@@ -97,16 +97,23 @@ export async function draftReportSection(input: {
   notes?: string;
 }, meta?: AiMeta): Promise<AiResult> {
   const evidence = input.evidenceSummaries.length
-    ? input.evidenceSummaries.map((e, i) => `[MC${i + 1}] ${e}`).join("\n")
+    ? input.evidenceSummaries.map((e) => `- ${e}`).join("\n")
     : "(Chưa có minh chứng được liên kết.)";
 
   return aiComplete({
     feature: "sar_draft",
     userId: meta?.userId,
     system: SYSTEM_QA,
-    maxTokens: 1500,
+    maxTokens: 4000,
     prompt: `Soạn bản nháp nội dung báo cáo tự đánh giá cho tiêu chí ${input.criterionCode ?? ""} "${input.criterionTitle}".
-Cấu trúc gồm: (1) Mô tả hiện trạng, (2) Phân tích dựa trên minh chứng, (3) Điểm mạnh, (4) Tồn tại, (5) Kế hoạch cải tiến.
+Trình bày bằng Markdown với ĐÚNG 5 tiêu đề cấp 3 theo thứ tự sau (không thêm tiêu đề cấp 1 hoặc cấp 2):
+### Mô tả hiện trạng
+### Phân tích dựa trên minh chứng
+### Điểm mạnh
+### Tồn tại
+### Kế hoạch cải tiến
+Yêu cầu: tổng cộng khoảng 500–800 từ; mỗi nhận định có số liệu hoặc khẳng định phải kèm mã minh chứng trong ngoặc vuông, đúng mã như danh sách (ví dụ [MC-1.1.01]); không bịa mã.
+Điểm mạnh và Tồn tại viết dạng gạch đầu dòng; Kế hoạch cải tiến nêu hành động, đơn vị thực hiện, thời hạn.
 Chỉ sử dụng thông tin từ minh chứng dưới đây; nếu thiếu dữ liệu định lượng thì ghi rõ "cần bổ sung số liệu".
 ${input.notes ? `Ghi chú: ${input.notes}\n` : ""}
 Minh chứng:\n${evidence}`,
