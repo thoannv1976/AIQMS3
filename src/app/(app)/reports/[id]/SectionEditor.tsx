@@ -71,6 +71,7 @@ export function SectionEditor({ section, canWrite, users }: { section: SectionDa
         <div className="space-y-4 border-t border-slate-100 px-5 py-4">
           {canWrite && (
             <form
+              key={`${section.assignedToId ?? ""}:${section.reviewerId ?? ""}`}
               action={assignSectionAction.bind(null, section.id)}
               className="flex flex-wrap items-end gap-2 rounded-lg bg-slate-50 p-3"
             >

@@ -61,7 +61,7 @@ export async function saveSectionAction(
 async function evidenceForSection(sectionId: string) {
   const section = await prisma.reportSection.findUnique({
     where: { id: sectionId },
-    include: { criterion: true, report: { include: { cycle: true } } },
+    include: { criterion: true, standard: true, report: { include: { cycle: true } } },
   });
   if (!section) return null;
 
@@ -88,8 +88,9 @@ export async function draftSectionAction(sectionId: string): Promise<{ text: str
   if (!ctx) return { text: "Không tìm thấy mục báo cáo.", usedFallback: true };
 
   const res = await draftReportSection({
-    criterionCode: ctx.section.criterion?.code,
-    criterionTitle: ctx.section.criterion?.title ?? ctx.section.title,
+    // A standard-level section is drafted for the whole standard, not just its first criterion.
+    criterionCode: ctx.section.standard ? `Tiêu chuẩn ${ctx.section.standard.code}` : ctx.section.criterion?.code,
+    criterionTitle: ctx.section.standard?.title ?? ctx.section.criterion?.title ?? ctx.section.title,
     evidenceSummaries: ctx.evidenceSummaries,
   }, { userId: user.id });
 
