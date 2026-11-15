@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 import { SurveyStatus } from "@/generated/prisma/enums";
 import { PublicSurveyForm } from "./PublicSurveyForm";
@@ -13,6 +14,8 @@ export default async function PublicSurveyPage({ params }: { params: Promise<{ t
   });
   if (!survey) notFound();
   const now = new Date();
+  const key = (await cookies()).get(`aiqms_sv_${survey.id}`)?.value;
+  const answered = key ? !!(await prisma.surveyResponse.findFirst({ where: { surveyId: survey.id, clientKey: key }, select: { id: true } })) : false;
   const open = survey.status === SurveyStatus.OPEN && !(survey.opensAt && survey.opensAt > now) && !(survey.closesAt && survey.closesAt < now);
 
   return (
@@ -25,7 +28,9 @@ export default async function PublicSurveyPage({ params }: { params: Promise<{ t
           <h1 className="mt-1 text-xl font-bold">{survey.title}</h1>
           {survey.description && <p className="mt-2 text-sm opacity-90">{survey.description}</p>}
         </div>
-        {!open ? (
+        {answered ? (
+          <div className="rounded-xl border border-green-200 bg-green-50 p-6 text-center text-green-800">Bạn đã gửi phản hồi cho phiếu này. Cảm ơn bạn!</div>
+        ) : !open ? (
           <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-slate-600">Phiếu khảo sát hiện chưa mở hoặc đã đóng. Cảm ơn bạn đã quan tâm.</div>
         ) : (
           <PublicSurveyForm

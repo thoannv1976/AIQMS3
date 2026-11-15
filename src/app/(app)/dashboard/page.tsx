@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { getCriteriaGaps } from "@/lib/metrics";
 import { allowedProgramIds } from "@/lib/access";
-import { getManagementOverview } from "@/lib/quality/management";
+import { getManagementOverview, briefTargetId } from "@/lib/quality/management";
 import { Card, CardContent, CardHeader, CardTitle, Badge, PageHeader, Select, Button, Th, Td } from "@/components/ui";
 import { StatCard, Progress } from "@/components/widgets";
 import { PieChartCard } from "@/components/charts";
@@ -26,7 +26,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       select: { id: true, name: true },
     }),
     can(user.role, "audit:view") ? prisma.auditLog.findMany({ orderBy: { createdAt: "desc" }, take: 8, include: { user: true } }) : Promise.resolve([]),
-    prisma.aiAnalysisResult.findFirst({ where: { type: "LEADERSHIP_BRIEF", targetType: "dashboard", targetId: facultyId ?? "all" }, orderBy: { createdAt: "desc" } }),
+    prisma.aiAnalysisResult.findFirst({ where: { type: "LEADERSHIP_BRIEF", targetType: "dashboard", targetId: briefTargetId(scope, user.id, facultyId) }, orderBy: { createdAt: "desc" } }),
   ]);
 
   const programStats = overview.programs;
@@ -236,9 +236,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 {overview.pdca.completed}/{overview.pdca.total}
               </b>
             </div>
-            <Link href="/ai-assistant" className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-brand-600 hover:text-brand-700">
-              Hỏi trợ lý AI <ArrowRight className="h-4 w-4" />
-            </Link>
+            {can(user.role, "ai:use") && (
+              <Link href="/ai-assistant" className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-brand-600 hover:text-brand-700">
+                Hỏi trợ lý AI <ArrowRight className="h-4 w-4" />
+              </Link>
+            )}
           </CardContent>
         </Card>
       </div>

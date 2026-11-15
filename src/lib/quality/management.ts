@@ -104,7 +104,7 @@ export async function getManagementOverview(opts: { programIds: string[] | null;
 
   const pdcaTotal = pdcaRows.reduce((s, r) => s + r._count._all, 0);
   const pdcaDone = pdcaRows.find((r) => r.status === PdcaStatus.COMPLETED)?._count._all ?? 0;
-  const faculty = opts.facultyId ? programs[0]?.faculty.name ?? "Khoa" : "Toàn trường";
+  const faculty = opts.facultyId ? programs[0]?.faculty.name ?? "Khoa" : opts.programIds ? "Chương trình được phân công" : "Toàn trường";
 
   return {
     scopeLabel: faculty,
@@ -141,4 +141,10 @@ export function overviewToText(o: ManagementOverview): string {
     lines.push("Theo khoa:", ...o.faculties.map((f) => `- ${f.name}: ${f.programs} CTĐT, sẵn sàng TB ${f.avgReadiness}%, MC chờ duyệt ${f.pendingEvidence}, việc quá hạn ${f.overdueTasks}`));
   }
   return lines.join("\n");
+}
+
+/** Cache key for the AI leadership brief: shared for institution-wide viewers, per-user for program-scoped ones. */
+export function briefTargetId(scope: string[] | null, userId: string, facultyId: string | null): string {
+  const f = facultyId ?? "all";
+  return scope === null ? f : `u:${userId}:${f}`;
 }

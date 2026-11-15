@@ -2,7 +2,7 @@ import { type NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { allowedProgramIds } from "@/lib/access";
-import { getManagementOverview } from "@/lib/quality/management";
+import { getManagementOverview, briefTargetId } from "@/lib/quality/management";
 import { esc, mdToHtml, wordDocument } from "@/lib/export/mdHtml";
 
 /** Management report (QA12): Word (.doc) or printable page → PDF. */
@@ -10,9 +10,10 @@ export async function GET(req: NextRequest) {
   const user = await requireUser();
   const format = req.nextUrl.searchParams.get("format") === "pdf" ? "pdf" : "doc";
   const facultyId = req.nextUrl.searchParams.get("faculty") || null;
-  const o = await getManagementOverview({ programIds: await allowedProgramIds(user), facultyId });
+  const scope = await allowedProgramIds(user);
+  const o = await getManagementOverview({ programIds: scope, facultyId });
   const brief = await prisma.aiAnalysisResult.findFirst({
-    where: { type: "LEADERSHIP_BRIEF", targetType: "dashboard", targetId: facultyId ?? "all" },
+    where: { type: "LEADERSHIP_BRIEF", targetType: "dashboard", targetId: briefTargetId(scope, user.id, facultyId) },
     orderBy: { createdAt: "desc" },
   });
   const now = new Date();
