@@ -17,7 +17,7 @@ interface ProgramLite {
 }
 
 // Program-scoped roles only make sense for non-institution roles.
-const SCOPED_ROLES: Role[] = [Role.FACULTY, Role.DEPARTMENT, Role.LECTURER, Role.QA_OFFICE];
+const SCOPED_ROLES: Role[] = [Role.FACULTY, Role.DEPARTMENT, Role.LECTURER, Role.QA_OFFICE, Role.EXTERNAL_REVIEWER];
 
 export function ProgramRoleForm({ users, programs }: { users: UserLite[]; programs: ProgramLite[] }) {
   const [state, action, pending] = useActionState<FormState, FormData>(assignProgramRoleAction, {});

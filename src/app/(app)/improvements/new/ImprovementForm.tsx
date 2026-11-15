@@ -9,13 +9,15 @@ import { Markdown } from "@/components/markdown";
 export function ImprovementForm({
   programId,
   criteria,
+  defaults,
 }: {
   programId: string;
   criteria: Array<{ id: string; code: string; title: string }>;
+  defaults?: { problem?: string; action?: string; source?: string; criterionId?: string };
 }) {
   const [state, action, pending] = useActionState<FormState, FormData>(createImprovement, {});
-  const [problem, setProblem] = useState("");
-  const [actionText, setActionText] = useState("");
+  const [problem, setProblem] = useState(defaults?.problem ?? "");
+  const [actionText, setActionText] = useState(defaults?.action ?? "");
   const [aiPending, startAi] = useTransition();
   const [suggestion, setSuggestion] = useState<{ text: string; usedFallback: boolean } | null>(null);
 
@@ -79,7 +81,7 @@ export function ImprovementForm({
       <div className="grid gap-4 md:grid-cols-3">
         <div>
           <Label htmlFor="source">Nguồn phát hiện</Label>
-          <Select id="source" name="source" defaultValue="SAR">
+          <Select id="source" name="source" defaultValue={defaults?.source ?? "SAR"}>
             <option value="SAR">Báo cáo TĐG</option>
             <option value="External review">Đánh giá ngoài</option>
             <option value="OBE">Đạt chuẩn đầu ra</option>
@@ -92,7 +94,7 @@ export function ImprovementForm({
         </div>
         <div>
           <Label htmlFor="criterionId">Tiêu chí liên quan</Label>
-          <Select id="criterionId" name="criterionId" defaultValue="">
+          <Select id="criterionId" name="criterionId" defaultValue={defaults?.criterionId ?? ""}>
             <option value="">— Không —</option>
             {criteria.map((c) => (
               <option key={c.id} value={c.id}>

@@ -42,10 +42,20 @@ export function CreateUserForm() {
           <Input id="title" name="title" placeholder="VD: Giảng viên bộ môn HTTT" />
         </div>
       </div>
-      <div>
-        <Label htmlFor="password">Mật khẩu khởi tạo</Label>
-        <Input id="password" name="password" placeholder="Mặc định: Aiqms@123" />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <Label htmlFor="password">Mật khẩu khởi tạo</Label>
+          <Input id="password" name="password" placeholder="Mặc định: Aiqms@123" />
+        </div>
+        <div>
+          <Label htmlFor="expiresAt">Hết hạn tài khoản</Label>
+          <Input id="expiresAt" name="expiresAt" type="date" />
+        </div>
       </div>
+      <p className="text-xs text-slate-500">
+        Đánh giá viên ngoài: chọn vai trò “Đánh giá viên ngoài”, đặt ngày hết hạn, rồi gán chương trình ở khung “Gán vai trò theo chương trình”. Tài khoản chỉ xem
+        minh chứng đã duyệt, báo cáo và mức sẵn sàng của chương trình được gán.
+      </p>
 
       {state.error && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{state.error}</div>}
       {state.ok && <div className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">Đã tạo người dùng.</div>}

@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { MessageSquareText, ArrowRight, TrendingUp, TrendingDown } from "lucide-react";
+import { MessageSquareText, ArrowRight, TrendingUp, TrendingDown, Plus } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { resolveProgram } from "@/lib/program-context";
+import { resolveProgram, programRolesOf } from "@/lib/program-context";
+import { canInProgram } from "@/lib/rbac";
 import { getSurveyAnalytics } from "@/lib/quality/surveys";
 import { ProgramSwitcher } from "@/components/program-switcher";
-import { Card, CardContent, CardHeader, CardTitle, PageHeader, Badge, EmptyState, Th, Td } from "@/components/ui";
+import { Card, CardContent, CardHeader, CardTitle, PageHeader, Badge, EmptyState, Th, Td, LinkButton } from "@/components/ui";
 import { StatCard } from "@/components/widgets";
 import { BarChartCard, LineChartCard } from "@/components/charts";
 import { surveyAudience, surveyStatus } from "@/lib/labels";
@@ -13,9 +14,10 @@ import { surveyAudience, surveyStatus } from "@/lib/labels";
 export const dynamic = "force-dynamic";
 
 export default async function SurveysPage({ searchParams }: { searchParams: Promise<{ program?: string }> }) {
-  await requireUser();
+  const user = await requireUser();
   const sp = await searchParams;
   const { programs, selected } = await resolveProgram(sp.program);
+  const canWrite = selected ? canInProgram(user.role, await programRolesOf(user.id, selected.id), "survey:write") : false;
 
   const surveys = selected
     ? await prisma.survey.findMany({
@@ -31,7 +33,16 @@ export default async function SurveysPage({ searchParams }: { searchParams: Prom
       <PageHeader
         title="Khảo sát các bên liên quan"
         description="Khảo sát sinh viên, cựu sinh viên, giảng viên, nhà tuyển dụng; so sánh các bên, xu hướng hài lòng và AI phân tích phản hồi"
-        actions={<ProgramSwitcher programs={programs} selectedId={selected?.id} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <ProgramSwitcher programs={programs} selectedId={selected?.id} />
+            {selected && canWrite && (
+              <LinkButton href={`/surveys/new?program=${selected.id}`}>
+                <Plus className="h-4 w-4" /> Tạo phiếu khảo sát
+              </LinkButton>
+            )}
+          </div>
+        }
       />
 
       {!selected ? (
