@@ -18,7 +18,7 @@ const APPROVED_STATUSES: EvidenceStatus[] = [EvidenceStatus.APPROVED, EvidenceSt
 export async function getProgramStats(programId: string): Promise<ProgramStats> {
   const cycle = await prisma.accreditationCycle.findFirst({
     where: { programId },
-    orderBy: { year: "desc" },
+    orderBy: [{ year: "desc" }, { createdAt: "desc" }],
     include: { standardSet: { include: { standards: { include: { criteria: { select: { id: true } } } } } } },
   });
 
@@ -69,7 +69,7 @@ export async function getProgramStats(programId: string): Promise<ProgramStats> 
 export async function getCriteriaGaps(programId: string, limit = 8) {
   const cycle = await prisma.accreditationCycle.findFirst({
     where: { programId },
-    orderBy: { year: "desc" },
+    orderBy: [{ year: "desc" }, { createdAt: "desc" }],
     include: {
       standardSet: {
         include: {

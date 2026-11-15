@@ -15,7 +15,7 @@ export default async function NewImprovementPage({ searchParams }: { searchParam
 
   const cycle = await prisma.accreditationCycle.findFirst({
     where: { programId: selected.id },
-    orderBy: { year: "desc" },
+    orderBy: [{ year: "desc" }, { createdAt: "desc" }],
     include: { standardSet: { include: { standards: { orderBy: { order: "asc" }, include: { criteria: { orderBy: { order: "asc" } } } } } } },
   });
   const criteria = cycle ? cycle.standardSet.standards.flatMap((s) => s.criteria).map((c) => ({ id: c.id, code: c.code, title: c.title })) : [];

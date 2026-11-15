@@ -8,6 +8,8 @@ import { logAudit } from "@/lib/audit";
 import { draftReportSection, reviewReportSection, reviewReportSectionAdvanced } from "@/lib/ai/features";
 import { evidenceStrength } from "@/lib/quality/scoring";
 import { assessSarQuality } from "@/lib/quality/sar";
+import { sectionCriterionIds } from "@/lib/quality/sections";
+import { createNotification } from "@/lib/notify";
 import { AiAnalysisType, EvidenceStatus, ReportSectionStatus, ReportStatus } from "@/generated/prisma/enums";
 
 const APPROVED_EV: EvidenceStatus[] = [EvidenceStatus.APPROVED, EvidenceStatus.USED_IN_REPORT];
@@ -65,9 +67,11 @@ async function evidenceForSection(sectionId: string) {
 
   let evidenceSummaries: string[] = [];
   let linkedEvidenceCount = 0;
-  if (section.criterionId) {
+  const critIds = await sectionCriterionIds(section);
+  if (critIds.length) {
     const links = await prisma.evidenceCriterionLink.findMany({
-      where: { criterionId: section.criterionId, evidence: { programId: section.report.cycle.programId } },
+      where: { criterionId: { in: critIds }, evidence: { programId: section.report.cycle.programId } },
+      distinct: ["evidenceId"],
       include: { evidence: { include: { document: true } } },
     });
     linkedEvidenceCount = links.length;
@@ -153,9 +157,11 @@ export async function reviewSectionAdvancedAction(sectionId: string): Promise<Ad
   let avgEvidenceStrength = 0;
   const evidenceSummaries: string[] = [];
 
-  if (section.criterionId) {
+  const critIds = await sectionCriterionIds(section);
+  if (critIds.length) {
     const links = await prisma.evidenceCriterionLink.findMany({
-      where: { criterionId: section.criterionId, evidence: { programId: section.report.cycle.programId } },
+      where: { criterionId: { in: critIds }, evidence: { programId: section.report.cycle.programId } },
+      distinct: ["evidenceId"],
       select: {
         evidence: {
           select: {
@@ -239,4 +245,28 @@ export async function reviewSectionAdvancedAction(sectionId: string): Promise<Ad
       checks: quality.checks.map((c) => ({ label: c.label, passed: c.passed, hint: c.hint })),
     },
   };
+}
+
+/** Assign writer (assignedTo) and reviewer for a SAR section; notifies newly assigned users. */
+export async function assignSectionAction(sectionId: string, formData: FormData): Promise<void> {
+  const user = await requireUser();
+  if (!can(user.role, "report:write")) return;
+  const assignedToId = String(formData.get("assignedToId") || "") || null;
+  const reviewerId = String(formData.get("reviewerId") || "") || null;
+  const before = await prisma.reportSection.findUnique({ where: { id: sectionId }, select: { assignedToId: true, reviewerId: true } });
+  if (!before) return;
+  const section = await prisma.reportSection.update({
+    where: { id: sectionId },
+    data: { assignedToId, reviewerId },
+    select: { reportId: true, title: true },
+  });
+  await logAudit({ userId: user.id, action: "ASSIGN", entityType: "ReportSection", entityId: sectionId, detail: { assignedToId, reviewerId } });
+  const link = `/reports/${section.reportId}`;
+  if (assignedToId && assignedToId !== before.assignedToId) {
+    await createNotification({ userId: assignedToId, title: "Bạn được phân công viết mục báo cáo tự đánh giá", message: section.title, link });
+  }
+  if (reviewerId && reviewerId !== before.reviewerId) {
+    await createNotification({ userId: reviewerId, title: "Bạn được phân công phản biện mục báo cáo tự đánh giá", message: section.title, link });
+  }
+  revalidatePath(link);
 }

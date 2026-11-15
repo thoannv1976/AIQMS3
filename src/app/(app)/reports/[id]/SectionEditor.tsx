@@ -6,7 +6,7 @@ import { Button, Badge, Textarea, Select, Label } from "@/components/ui";
 import type { BadgeColor } from "@/components/ui";
 import { Progress } from "@/components/widgets";
 import { reportSectionStatus } from "@/lib/labels";
-import { saveSectionAction, draftSectionAction, reviewSectionAction, reviewSectionAdvancedAction } from "../actions";
+import { saveSectionAction, draftSectionAction, reviewSectionAction, reviewSectionAdvancedAction, assignSectionAction } from "../actions";
 import type { AdvancedReviewResult } from "../actions";
 import { ReportSectionStatus } from "@/generated/prisma/enums";
 
@@ -22,9 +22,18 @@ interface SectionData {
   improvementPlan: string | null;
   status: ReportSectionStatus;
   linkedCount: number;
+  assignedToId: string | null;
+  reviewerId: string | null;
+  assigneeName: string | null;
+  reviewerName: string | null;
 }
 
-export function SectionEditor({ section, canWrite }: { section: SectionData; canWrite: boolean }) {
+interface UserOption {
+  id: string;
+  fullName: string;
+}
+
+export function SectionEditor({ section, canWrite, users }: { section: SectionData; canWrite: boolean; users: UserOption[] }) {
   const [open, setOpen] = useState(false);
   const [content, setContent] = useState(section.content ?? "");
   const [strengths, setStrengths] = useState(section.strengths ?? "");
@@ -48,14 +57,50 @@ export function SectionEditor({ section, canWrite }: { section: SectionData; can
       >
         <div className="flex items-center gap-3">
           <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
-          <span className="font-medium text-slate-800">{section.title}</span>
+          <span className="line-clamp-2 font-medium text-slate-800" title={section.title}>
+            {section.title}
+          </span>
           <Badge color={section.linkedCount > 0 ? "green" : "amber"}>{section.linkedCount} MC</Badge>
+          {section.assigneeName && <span className="hidden text-xs text-slate-500 md:inline">✍ {section.assigneeName}</span>}
+          {section.reviewerName && <span className="hidden text-xs text-slate-500 md:inline">· 🔍 {section.reviewerName}</span>}
         </div>
         <Badge color={meta.color}>{meta.label}</Badge>
       </button>
 
       {open && (
         <div className="space-y-4 border-t border-slate-100 px-5 py-4">
+          {canWrite && (
+            <form
+              action={assignSectionAction.bind(null, section.id)}
+              className="flex flex-wrap items-end gap-2 rounded-lg bg-slate-50 p-3"
+            >
+              <div>
+                <Label>Người viết</Label>
+                <Select name="assignedToId" defaultValue={section.assignedToId ?? ""} className="h-8 w-56 text-xs">
+                  <option value="">— Chưa phân công —</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.fullName}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <Label>Người phản biện</Label>
+                <Select name="reviewerId" defaultValue={section.reviewerId ?? ""} className="h-8 w-56 text-xs">
+                  <option value="">— Chưa phân công —</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.fullName}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <Button type="submit" size="sm" variant="outline">
+                Lưu phân công
+              </Button>
+            </form>
+          )}
           {canWrite && (
             <div className="flex flex-wrap gap-2">
               <Button

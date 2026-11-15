@@ -30,7 +30,7 @@ export async function createImprovement(_prev: FormState, formData: FormData): P
 
   if (!programId || !problem) return { error: "Vui lòng nhập chương trình và vấn đề cần cải tiến." };
 
-  const cycle = await prisma.accreditationCycle.findFirst({ where: { programId }, orderBy: { year: "desc" } });
+  const cycle = await prisma.accreditationCycle.findFirst({ where: { programId }, orderBy: [{ year: "desc" }, { createdAt: "desc" }] });
 
   await prisma.improvementPlan.create({
     data: { programId, cycleId: cycle?.id ?? null, criterionId, problem, rootCause, action, responsibleUnit, kpi, source, dueDate, status: PdcaStatus.PLAN },

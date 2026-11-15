@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle, Badge, PageHeader, Button, Th
 import { formatDate } from "@/lib/utils";
 import { CreateUserForm } from "./CreateUserForm";
 import { ProgramRoleForm } from "./ProgramRoleForm";
-import { toggleUserActiveAction, removeProgramRoleAction } from "./actions";
+import { toggleUserActiveAction, removeProgramRoleAction, resetPasswordAction } from "./actions";
+import { Input } from "@/components/ui";
 
 export default async function AdminUsersPage() {
   const actor = await requireUser();
@@ -59,11 +60,25 @@ export default async function AdminUsersPage() {
                         <Td className="text-xs text-slate-400">{formatDate(u.createdAt)}</Td>
                         <Td>
                           {u.id !== actor.id && (
-                            <form action={toggleUserActiveAction.bind(null, u.id)}>
-                              <Button type="submit" size="sm" variant="outline">
-                                {u.isActive ? "Khóa" : "Mở khóa"}
-                              </Button>
-                            </form>
+                            <div className="flex items-center gap-2">
+                              <form action={toggleUserActiveAction.bind(null, u.id)}>
+                                <Button type="submit" size="sm" variant="outline">
+                                  {u.isActive ? "Khóa" : "Mở khóa"}
+                                </Button>
+                              </form>
+                              <details className="relative">
+                                <summary className="cursor-pointer list-none text-xs text-brand-600 hover:underline">Đặt lại MK</summary>
+                                <form
+                                  action={resetPasswordAction.bind(null, u.id)}
+                                  className="absolute right-0 z-20 mt-1 flex w-64 gap-1 rounded-lg border border-slate-200 bg-white p-2 shadow-lg"
+                                >
+                                  <Input name="password" type="text" minLength={8} required placeholder="Mật khẩu mới (≥ 8 ký tự)" className="h-8 text-xs" />
+                                  <Button type="submit" size="sm">
+                                    Lưu
+                                  </Button>
+                                </form>
+                              </details>
+                            </div>
                           )}
                         </Td>
                       </tr>

@@ -2,10 +2,13 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { Card, CardContent, PageHeader, Badge, EmptyState } from "@/components/ui";
+import { can } from "@/lib/rbac";
+import { Card, CardContent, CardHeader, CardTitle, PageHeader, Badge, EmptyState, Input, Button } from "@/components/ui";
+import { createStandardSetAction } from "./actions";
 
 export default async function StandardsPage() {
-  await requireUser();
+  const user = await requireUser();
+  const canWrite = can(user.role, "standard:write");
   const sets = await prisma.accreditationStandardSet.findMany({
     include: {
       _count: { select: { standards: true, cycles: true } },
@@ -48,6 +51,25 @@ export default async function StandardsPage() {
             );
           })}
         </div>
+      )}
+
+      {canWrite && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>Thêm bộ tiêu chuẩn</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form action={createStandardSetAction} className="grid gap-3 md:grid-cols-[160px_1fr_1fr_auto]">
+              <Input name="code" placeholder="Mã, VD: NOIBO_2026" required />
+              <Input name="name" placeholder="Tên bộ tiêu chuẩn" required />
+              <Input name="description" placeholder="Mô tả (tùy chọn)" />
+              <Button type="submit">Tạo</Button>
+            </form>
+            <p className="mt-2 text-xs text-slate-500">
+              Sau khi tạo, mở bộ tiêu chuẩn để thêm tiêu chuẩn và tiêu chí. Có thể dùng cho bộ tiêu chí nội bộ của trường.
+            </p>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

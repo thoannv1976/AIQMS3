@@ -14,7 +14,8 @@
     "db:push": "prisma db push",
     "db:seed": "prisma generate && tsx prisma/seed.ts",
     "db:reset": "prisma migrate reset --force",
-    "rag:pgvector": "tsx scripts/setup-pgvector.ts"
+    "rag:pgvector": "tsx scripts/setup-pgvector.ts",
+    "db:standards": "prisma generate && tsx scripts/seed-standards.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

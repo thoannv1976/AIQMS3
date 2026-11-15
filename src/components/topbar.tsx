@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { LogOut, Sparkles } from "lucide-react";
 import type { SessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -45,7 +46,7 @@ export async function Topbar({ user }: { user: SessionUser }) {
           }))}
         />
 
-        <div className="flex items-center gap-3">
+        <Link href="/account" className="flex items-center gap-3 rounded-lg px-1 py-0.5 hover:bg-slate-50" title="Tài khoản · đổi mật khẩu">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-700">
             {initials(user.fullName)}
           </div>
@@ -53,7 +54,7 @@ export async function Topbar({ user }: { user: SessionUser }) {
             <div className="text-sm font-medium text-slate-900">{user.fullName}</div>
             <div className="text-[11px] text-slate-500">{roleLabel(user.role)}</div>
           </div>
-        </div>
+        </Link>
 
         <form action={logoutAction}>
           <button

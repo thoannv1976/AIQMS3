@@ -3,16 +3,22 @@ import { notFound } from "next/navigation";
 import { FolderArchive, FileText, Target, ClipboardCheck } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { roleLabel } from "@/lib/rbac";
+import { roleLabel, can } from "@/lib/rbac";
+import { AutoSubmitSelect, ConfirmButton } from "@/components/form-controls";
+import { createCycleAction, updateCycleStatusAction, createReportAction, createCourseAction, deleteCourseAction } from "../actions";
 import { getProgramStats } from "@/lib/metrics";
-import { Card, CardContent, CardHeader, CardTitle, Badge, PageHeader, LinkButton, Th, Td } from "@/components/ui";
+import { Card, CardContent, CardHeader, CardTitle, Badge, PageHeader, LinkButton, Th, Td, Input, Select, Button } from "@/components/ui";
 import { StatCard, DescItem } from "@/components/widgets";
 import { degreeLevel, programVersionStatus, cycleStatus } from "@/lib/labels";
 import { formatDate } from "@/lib/utils";
 
 export default async function ProgramDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  await requireUser();
+  const user = await requireUser();
+  const canProgram = can(user.role, "program:write");
+  const canCycle = canProgram || can(user.role, "report:write");
+  const canReport = can(user.role, "report:write");
+  const canCourse = canProgram || can(user.role, "outcome:write");
 
   const program = await prisma.program.findUnique({
     where: { id },
@@ -21,19 +27,24 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
       versions: { orderBy: { year: "desc" } },
       courses: { orderBy: { semester: "asc" }, include: { _count: { select: { clos: true } } } },
       plos: { orderBy: { code: "asc" } },
-      cycles: { orderBy: { year: "desc" }, include: { standardSet: true } },
+      cycles: {
+        orderBy: [{ year: "desc" }, { createdAt: "desc" }],
+        include: { standardSet: true, reports: { select: { id: true, title: true }, orderBy: { createdAt: "asc" } } },
+      },
     },
   });
   if (!program) notFound();
 
-  const [stats, teamRoles] = await Promise.all([
+  const [stats, teamRoles, standardSets] = await Promise.all([
     getProgramStats(program.id),
     prisma.userProgramRole.findMany({
       where: { programId: id },
       include: { user: { select: { fullName: true } } },
       orderBy: { role: "asc" },
     }),
+    prisma.accreditationStandardSet.findMany({ orderBy: { createdAt: "asc" }, select: { id: true, code: true, name: true } }),
   ]);
+  const thisYear = new Date().getFullYear();
 
   return (
     <div>
@@ -108,27 +119,56 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
                   <Th>TC</Th>
                   <Th>HK</Th>
                   <Th>CLO</Th>
+                  {canProgram && <Th />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {program.courses.map((c) => (
                   <tr key={c.id}>
-                    <Td className="font-medium">{c.code}</Td>
+                    <Td className="font-medium">
+                      <Link href={`/syllabi/${c.id}`} className="text-brand-700 hover:underline">
+                        {c.code}
+                      </Link>
+                    </Td>
                     <Td>{c.nameVi}</Td>
                     <Td>{c.credits}</Td>
                     <Td>{c.semester ?? "—"}</Td>
                     <Td>{c._count.clos}</Td>
+                    {canProgram && (
+                      <Td>
+                        <form action={deleteCourseAction.bind(null, c.id)}>
+                          <ConfirmButton message={`Xóa học phần ${c.code} cùng CLO, đề cương và liên kết ma trận của nó?`}>Xóa</ConfirmButton>
+                        </form>
+                      </Td>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
+            {canCourse && (
+              <form
+                action={createCourseAction.bind(null, program.id)}
+                className="flex flex-wrap items-center gap-2 border-t border-slate-100 px-4 py-3"
+              >
+                <Input name="code" placeholder="Mã HP" className="w-24" required />
+                <Input name="nameVi" placeholder="Tên học phần" className="min-w-48 flex-1" required />
+                <Input name="credits" type="number" min={1} max={20} placeholder="TC" className="w-16" />
+                <Input name="semester" type="number" min={1} max={12} placeholder="HK" className="w-16" />
+                <Button type="submit" size="sm">
+                  Thêm học phần
+                </Button>
+              </form>
+            )}
           </CardContent>
         </Card>
 
         <div className="space-y-6">
           <Card>
-            <CardHeader>
+            <CardHeader className="flex items-center justify-between">
               <CardTitle>Chuẩn đầu ra ({program.plos.length})</CardTitle>
+              <Link href={`/outcomes?program=${program.id}`} className="text-sm text-brand-600 hover:underline">
+                Quản lý PLO & ma trận
+              </Link>
             </CardHeader>
             <CardContent className="space-y-2">
               {program.plos.map((p) => (
@@ -147,16 +187,70 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
             <CardContent className="space-y-2">
               {program.cycles.length === 0 && <p className="text-sm text-slate-500">Chưa có chu kỳ kiểm định.</p>}
               {program.cycles.map((c) => (
-                <div key={c.id} className="flex items-center justify-between text-sm">
-                  <div>
-                    <div className="font-medium text-slate-800">{c.name}</div>
-                    <div className="text-xs text-slate-500">
-                      {c.standardSet.name} · Mục tiêu: {formatDate(c.targetDate)}
+                <div key={c.id} className="space-y-2 rounded-lg border border-slate-100 p-3 text-sm">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-medium text-slate-800">{c.name}</div>
+                      <div className="text-xs text-slate-500">
+                        {c.standardSet.name} · Mục tiêu: {formatDate(c.targetDate)}
+                      </div>
                     </div>
+                    {canCycle ? (
+                      <form action={updateCycleStatusAction.bind(null, c.id)}>
+                        <AutoSubmitSelect name="status" defaultValue={c.status} aria-label="Trạng thái chu kỳ">
+                          {Object.entries(cycleStatus).map(([k, v]) => (
+                            <option key={k} value={k}>
+                              {v.label}
+                            </option>
+                          ))}
+                        </AutoSubmitSelect>
+                      </form>
+                    ) : (
+                      <Badge color={cycleStatus[c.status].color}>{cycleStatus[c.status].label}</Badge>
+                    )}
                   </div>
-                  <Badge color={cycleStatus[c.status].color}>{cycleStatus[c.status].label}</Badge>
+                  {c.reports.map((r) => (
+                    <Link key={r.id} href={`/reports/${r.id}`} className="flex items-center gap-1.5 text-xs text-brand-700 hover:underline">
+                      <FileText className="h-3.5 w-3.5" /> {r.title}
+                    </Link>
+                  ))}
+                  {canReport && c.reports.length === 0 && (
+                    <form action={createReportAction.bind(null, c.id)} className="flex flex-wrap items-center gap-2 pt-1">
+                      <Select name="granularity" defaultValue="criterion" className="h-8 w-auto text-xs">
+                        <option value="criterion">Mỗi tiêu chí một mục</option>
+                        <option value="standard">Mỗi tiêu chuẩn một mục</option>
+                      </Select>
+                      <Button type="submit" size="sm">
+                        <FileText className="h-3.5 w-3.5" /> Tạo báo cáo tự đánh giá
+                      </Button>
+                    </form>
+                  )}
                 </div>
               ))}
+              {canCycle && (
+                <form action={createCycleAction.bind(null, program.id)} className="space-y-2 rounded-lg border border-dashed border-slate-300 p-3">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tạo chu kỳ / đợt tự đánh giá</div>
+                  <Select name="standardSetId" required defaultValue="">
+                    <option value="" disabled>
+                      — Chọn bộ tiêu chuẩn —
+                    </option>
+                    {standardSets.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </Select>
+                  <Input name="name" placeholder="Tên chu kỳ (để trống sẽ tự đặt)" />
+                  <div className="grid grid-cols-3 gap-2">
+                    <Input name="year" type="number" defaultValue={thisYear} aria-label="Năm" />
+                    <Input name="startDate" type="date" aria-label="Ngày bắt đầu" title="Ngày bắt đầu" />
+                    <Input name="targetDate" type="date" aria-label="Hạn hoàn thành" title="Hạn hoàn thành" />
+                  </div>
+                  <Button type="submit" size="sm">
+                    Tạo chu kỳ
+                  </Button>
+                </form>
+              )}
             </CardContent>
           </Card>
 

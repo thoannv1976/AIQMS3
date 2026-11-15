@@ -1,0 +1,151 @@
+[
+  {
+    "code": "MOET_TT04_2025",
+    "name": "Thông tư 04/2025/TT-BGDĐT — Kiểm định chất lượng chương trình đào tạo",
+    "description": "Ban hành 17/02/2025, hiệu lực từ 04/4/2025; thay thế TT 38/2013 và TT 04/2016. 08 tiêu chuẩn, 52 tiêu chí; mỗi tiêu chí đánh giá đạt/không đạt. Tiêu chí điều kiện: 1.3, 1.6, 2.2, 2.4, 3.2, 4.5, 5.2, 6.1, 7.3, 8.2. Nguồn: văn bản gốc của Thông tư.",
+    "standards": [
+      {"code":"1","title":"Mục tiêu và chuẩn đầu ra của chương trình đào tạo","criteria":[
+        {"code":"1.1","title":"Mục tiêu của chương trình đào tạo được xác định rõ ràng, phù hợp và gắn kết với sứ mạng, tầm nhìn, chiến lược phát triển của cơ sở đào tạo; phù hợp với mục tiêu của giáo dục đại học theo quy định tại Luật Giáo dục đại học."},
+        {"code":"1.2","title":"Chuẩn đầu ra của chương trình đào tạo được xây dựng rõ ràng; phù hợp với sứ mạng, tầm nhìn và mục tiêu chiến lược của cơ sở đào tạo và được phổ biến đến các bên liên quan."},
+        {"code":"1.3","title":"Chuẩn đầu ra của chương trình đào tạo phù hợp với Khung trình độ quốc gia Việt Nam và chuẩn chương trình đào tạo nhóm ngành, bao gồm chuẩn đầu ra chung và chuẩn đầu ra chuyên biệt."},
+        {"code":"1.4","title":"Chuẩn đầu ra của tất cả các học phần được xây dựng phải phù hợp và tương thích với chuẩn đầu ra của chương trình đào tạo đã công bố."},
+        {"code":"1.5","title":"Chuẩn đầu ra của chương trình đào tạo phản ánh rõ yêu cầu của các bên liên quan, đặc biệt là các bên liên quan bên ngoài."},
+        {"code":"1.6","title":"Chuẩn đầu ra của chương trình đào tạo được đo lường đánh giá tại thời điểm người học tốt nghiệp."}]},
+      {"code":"2","title":"Cấu trúc và nội dung chương trình đào tạo","criteria":[
+        {"code":"2.1","title":"Bản mô tả chương trình đào tạo và đề cương các học phần có đủ thông tin, được cập nhật, được phê duyệt và được công bố công khai để các bên liên quan dễ dàng tiếp cận."},
+        {"code":"2.2","title":"Cấu trúc và nội dung của chương trình đào tạo được thiết kế và phát triển để bảo đảm người học đạt được chuẩn đầu ra và có khối lượng học tập phù hợp với quy định."},
+        {"code":"2.3","title":"Cấu trúc và nội dung của chương trình đào tạo được thiết kế và phát triển dựa trên phản hồi và nhu cầu của các bên liên quan, đặc biệt là các bên liên quan bên ngoài."},
+        {"code":"2.4","title":"Đóng góp của từng học phần trong việc đạt được chuẩn đầu ra của chương trình đào tạo là rõ ràng."},
+        {"code":"2.5","title":"Chương trình đào tạo có cấu trúc logic, trình tự hợp lý, có tính linh hoạt và tích hợp."},
+        {"code":"2.6","title":"Cấu trúc và nội dung của chương trình đào tạo thể hiện rõ các học phần bắt buộc, tự chọn, lý thuyết, thực hành, trải nghiệm, nghiên cứu khoa học, các thành phần chính yếu và bổ trợ; cho phép người học lựa chọn theo định hướng nghề nghiệp của bản thân."},
+        {"code":"2.7","title":"Cấu trúc và nội dung của chương trình đào tạo được rà soát, đánh giá và cải tiến chất lượng theo quy trình, quy định; bảo đảm tính cập nhật, đáp ứng yêu cầu của thị trường lao động."}]},
+      {"code":"3","title":"Hoạt động dạy và học","criteria":[
+        {"code":"3.1","title":"Triết lý giáo dục của cơ sở đào tạo được tuyên bố rõ ràng, được phổ biến đến các bên liên quan và được truyền tải vào các hoạt động dạy và học."},
+        {"code":"3.2","title":"Hoạt động dạy và học được thiết kế tương thích với chuẩn đầu ra của chương trình đào tạo."},
+        {"code":"3.3","title":"Hoạt động dạy và học thể hiện việc học tập chủ động, thúc đẩy việc học tập, hình thành và phát triển phương pháp học tập và khả năng học tập suốt đời của người học."},
+        {"code":"3.4","title":"Hoạt động dạy và học thúc đẩy người học đưa ra ý tưởng mới, sáng kiến, đổi mới sáng tạo và tinh thần khởi nghiệp."},
+        {"code":"3.5","title":"Quá trình dạy và học được cải tiến thường xuyên để đáp ứng yêu cầu của thị trường lao động và thúc đẩy việc học tập, đáp ứng chuẩn đầu ra của chương trình đào tạo."}]},
+      {"code":"4","title":"Đánh giá kết quả học tập","criteria":[
+        {"code":"4.1","title":"Các phương pháp đánh giá kết quả học tập của người học đa dạng, tương thích với chuẩn đầu ra của chương trình đào tạo."},
+        {"code":"4.2","title":"Có các quy định rõ ràng về đánh giá kết quả học tập, quy trình phúc khảo, được phổ biến đến người học và được triển khai thực hiện một cách nhất quán."},
+        {"code":"4.3","title":"Các tiêu chuẩn và quy trình đánh giá kết quả học tập, xét công nhận kết quả học tập, xét tốt nghiệp được phổ biến đến người học và được triển khai thực hiện một cách nhất quán."},
+        {"code":"4.4","title":"Các phương pháp đánh giá kết quả học tập được thể hiện qua ma trận, tiêu chí và mức độ đánh giá, đáp án, thang điểm chi tiết, kế hoạch đánh giá và các quy định cụ thể để bảo đảm độ giá trị, độ tin cậy và sự công bằng."},
+        {"code":"4.5","title":"Các phương pháp đánh giá kết quả học tập bảo đảm đo lường được mức độ đạt chuẩn đầu ra của từng học phần và chuẩn đầu ra của chương trình đào tạo."},
+        {"code":"4.6","title":"Kết quả đánh giá được phản hồi kịp thời cho người học để người học cải thiện việc học tập, phương pháp học tập và kết quả học tập."},
+        {"code":"4.7","title":"Việc đánh giá kết quả học tập và các quy định về đánh giá kết quả học tập được định kỳ rà soát và cải tiến để bảo đảm đo lường được chuẩn đầu ra của chương trình đào tạo, đáp ứng nhu cầu của các bên liên quan."}]},
+      {"code":"5","title":"Đội ngũ giảng viên, nghiên cứu viên","criteria":[
+        {"code":"5.1","title":"Kế hoạch phát triển đội ngũ giảng viên, nghiên cứu viên tham gia chương trình đào tạo được thực hiện nhằm bảo đảm về số lượng và chất lượng đáp ứng các yêu cầu về đào tạo, nghiên cứu khoa học và kết nối phục vụ cộng đồng."},
+        {"code":"5.2","title":"Số lượng và chất lượng đội ngũ giảng viên, nghiên cứu viên đáp ứng yêu cầu thực hiện chương trình đào tạo theo quy định; khối lượng công việc của đội ngũ giảng viên, nghiên cứu viên được đo lường, giám sát…"},
+        {"code":"5.3","title":"Năng lực của đội ngũ giảng viên, nghiên cứu viên được xác định, được đánh giá và thông tin tới các bên có liên quan trực tiếp."},
+        {"code":"5.4","title":"Giảng viên, nghiên cứu viên được phân công nhiệm vụ phù hợp với trình độ, năng lực và kinh nghiệm."},
+        {"code":"5.5","title":"Việc bổ nhiệm/thăng tiến của giảng viên, nghiên cứu viên dựa trên hệ thống đánh giá năng lực, kết quả giảng dạy, thực hiện nhiệm vụ nghiên cứu khoa học và kết nối phục vụ cộng đồng."},
+        {"code":"5.6","title":"Trách nhiệm, quyền hạn và nghĩa vụ của giảng viên, nghiên cứu viên được xác định rõ ràng theo quy định và được phổ biến để tất cả giảng viên, nghiên cứu viên hiểu rõ và thực hiện."},
+        {"code":"5.7","title":"Nhu cầu về đào tạo, bồi dưỡng và phát triển chuyên môn của giảng viên, nghiên cứu viên được xác định có tính hệ thống; các hoạt động đào tạo, bồi dưỡng được triển khai để đáp ứng nhu cầu."},
+        {"code":"5.8","title":"Công tác quản lý để đánh giá chất lượng giảng dạy, nghiên cứu khoa học và phục vụ cộng đồng của giảng viên, nghiên cứu viên bao gồm cả việc khen thưởng và công nhận được triển khai theo quy định, quy trình cụ thể."}]},
+      {"code":"6","title":"Các dịch vụ hỗ trợ người học","criteria":[
+        {"code":"6.1","title":"Chính sách, tiêu chí và quy trình tuyển sinh được xác định rõ ràng theo yêu cầu của chương trình đào tạo; được công bố công khai và được cập nhật."},
+        {"code":"6.2","title":"Năng lực của đội ngũ cung cấp dịch vụ hỗ trợ được xác định rõ ràng trong tiêu chuẩn của vị trí việc làm, tiêu chí tuyển dụng, trong phân công nhiệm vụ và được đánh giá để bảo đảm phù hợp với nhu cầu của các bên liên quan."},
+        {"code":"6.3","title":"Kế hoạch ngắn hạn và dài hạn đối với dịch vụ hỗ trợ người học (học thuật và phi học thuật) được xây dựng, triển khai thực hiện để bảo đảm đáp ứng đầy đủ và có chất lượng các dịch vụ hỗ trợ đào tạo, nghiên cứu khoa học và kết nối phục vụ cộng đồng."},
+        {"code":"6.4","title":"Có hệ thống quản lý đào tạo phù hợp để giám sát, ghi nhận được tiến độ, kết quả học tập và khối lượng học tập của người học; việc phản hồi cho người học và hoạt động khắc phục bất cập được triển khai kịp thời…"},
+        {"code":"6.5","title":"Có các hoạt động tư vấn học tập, hoạt động ngoại khóa, các cuộc thi và các dịch vụ hỗ trợ khác để giúp cải thiện việc học tập và tăng khả năng có việc làm của người học."},
+        {"code":"6.6","title":"Các dịch vụ hỗ trợ người học được định kỳ đánh giá, đối sánh và cải tiến chất lượng."}]},
+      {"code":"7","title":"Cơ sở hạ tầng, cơ sở vật chất và trang thiết bị","criteria":[
+        {"code":"7.1","title":"Có hệ thống phòng làm việc, phòng học và các phòng chức năng với các trang thiết bị phù hợp để triển khai chương trình đào tạo, hỗ trợ triển khai hoạt động đào tạo, nghiên cứu khoa học và kết nối phục vụ cộng đồng."},
+        {"code":"7.2","title":"Các phòng thí nghiệm, phòng thực hành và trang thiết bị đầy đủ theo yêu cầu của chương trình đào tạo, được cập nhật, được sử dụng hiệu quả đáp ứng yêu cầu của người học, giảng viên và nghiên cứu viên."},
+        {"code":"7.3","title":"Có thư viện, thư viện số và nguồn học liệu được cập nhật đáp ứng nhu cầu đào tạo, nghiên cứu khoa học, có cập nhật tiến bộ về công nghệ thông tin - truyền thông."},
+        {"code":"7.4","title":"Có hệ thống công nghệ thông tin, hạ tầng mạng và máy tính dễ dàng tiếp cận và sử dụng, đáp ứng nhu cầu của người học, giảng viên, nghiên cứu viên, đội ngũ quản lý và nhân viên…"},
+        {"code":"7.5","title":"Môi trường tâm lý, xã hội và cảnh quan thiên nhiên tạo thuận lợi cho hoạt động đào tạo, nghiên cứu khoa học và sự thoải mái cho người học."},
+        {"code":"7.6","title":"Các tiêu chuẩn về môi trường, sức khỏe, an toàn được xác định và triển khai có lưu ý đến các nhu cầu của các nhóm người học đặc thù, chuyên biệt (nếu có)."},
+        {"code":"7.7","title":"Năng lực đội ngũ hỗ trợ về cơ sở vật chất và trang thiết bị được xác định và được đánh giá đáp ứng nhu cầu các bên liên quan."},
+        {"code":"7.8","title":"Chất lượng cơ sở vật chất phục vụ chương trình đào tạo được định kỳ đánh giá và cải tiến."}]},
+      {"code":"8","title":"Đầu ra và kết quả đầu ra","criteria":[
+        {"code":"8.1","title":"Tỉ lệ tốt nghiệp, thôi học và thời gian tốt nghiệp trung bình của người học được xác lập, giám sát, đối sánh để cải tiến chất lượng."},
+        {"code":"8.2","title":"Tỉ lệ việc làm bao gồm cả tự tạo việc làm, khởi nghiệp và học tập nâng cao trình độ của người học tốt nghiệp được xác lập, giám sát và đối sánh để cải tiến chất lượng."},
+        {"code":"8.3","title":"Hoạt động nghiên cứu khoa học và sản phẩm sáng tạo, sáng chế của người học, giảng viên và nghiên cứu viên được xác lập, giám sát và đối sánh để cải tiến chất lượng."},
+        {"code":"8.4","title":"Dữ liệu về mức độ người học đạt chuẩn đầu ra của chương trình đào tạo được xác lập và giám sát để cải tiến chất lượng."},
+        {"code":"8.5","title":"Mức độ hài lòng của các bên liên quan được xác lập, giám sát, đối sánh để cải tiến chất lượng."}]}
+    ]
+  },
+  {
+    "code": "MOET_TT20_2026",
+    "name": "Thông tư 20/2026/TT-BGDĐT — Kiểm định chất lượng cơ sở giáo dục đại học",
+    "description": "Ban hành 31/3/2026, hiệu lực từ 15/5/2026; thay thế TT 12/2017. 15 tiêu chuẩn, 60 tiêu chí, 4 mục: Lãnh đạo và quản lý chiến lược (TC1–5); Các chức năng chính (TC6–8); Hệ thống bảo đảm chất lượng và hỗ trợ (TC9–11); Kết quả và tác động (TC12–15). Bộ tiêu chuẩn cấp cơ sở giáo dục. Nguồn: văn bản gốc của Thông tư.",
+    "standards": [
+      {"code":"1","title":"Tầm nhìn, sứ mạng, văn hóa và quản trị","criteria":[
+        {"code":"1.1","title":"Lãnh đạo cơ sở giáo dục đại học (sau đây gọi là CSĐT) công bố tầm nhìn, sứ mạng của CSĐT, bảo đảm đáp ứng nhu cầu của các bên liên quan."},
+        {"code":"1.2","title":"CSĐT có hệ thống quản trị bao gồm hội đồng đại học/hội đồng trường (nếu có), ban giám đốc/ban giám hiệu, tổ chức Đảng, đoàn thể (nếu có), hội đồng khoa học và đào tạo, các hội đồng tư vấn, và các thành phần quản trị khác…"},
+        {"code":"1.3","title":"Lãnh đạo CSĐT thúc đẩy các giá trị văn hóa nhằm đề cao tính liêm chính học thuật và hành vi chuẩn mực, bảo đảm phù hợp với tầm nhìn, sứ mạng và hướng tới việc đạt được các mục tiêu của CSĐT."},
+        {"code":"1.4","title":"Tầm nhìn, sứ mạng và các giá trị văn hóa của CSĐT được truyền đạt rõ ràng và triển khai thực hiện đến nhân sự tất cả các cấp của CSĐT."},
+        {"code":"1.5","title":"Các quyết định của tổ chức quản trị được cụ thể hóa thành kế hoạch hành động và chính sách, trong đó thể hiện trách nhiệm xã hội của CSĐT nhằm bảo vệ lợi ích của các bên liên quan, cộng đồng và môi trường."},
+        {"code":"1.6","title":"Hệ thống quản trị của CSĐT được cải tiến để nâng cao hiệu quả hoạt động và quản lý rủi ro tốt hơn."}]},
+      {"code":"2","title":"Lãnh đạo và chiến lược","criteria":[
+        {"code":"2.1","title":"CSĐT có cơ cấu tổ chức quản lý với các vai trò và trách nhiệm được xác định rõ ràng, bảo đảm thông tin được trao đổi thông suốt và đa chiều."},
+        {"code":"2.2","title":"Cơ cấu tổ chức quản lý được rà soát định kỳ nhằm nâng cao hiệu quả hoạt động và kết quả vận hành của CSĐT."},
+        {"code":"2.3","title":"Các kế hoạch chiến lược ngắn, trung và dài hạn được triển khai nhằm đáp ứng các nhu cầu về đào tạo, nghiên cứu khoa học, kết nối và phục vụ cộng đồng; …"},
+        {"code":"2.4","title":"Các chỉ số chính nhằm đánh giá hiệu quả thực hiện (KPIs) và các chỉ tiêu được thiết lập nhằm đo lường mức độ thực hiện các mục tiêu chiến lược của CSĐT."},
+        {"code":"2.5","title":"Kế hoạch chiến lược được phổ biến và triển khai tới tất cả các cấp quản lý và nhân sự trong CSĐT, gắn với mục tiêu công việc của từng cá nhân."}]},
+      {"code":"3","title":"Nguồn nhân lực","criteria":[
+        {"code":"3.1","title":"Quy hoạch nguồn nhân lực cho đội ngũ giảng viên, nghiên cứu viên, chuyên viên, nhân viên, kỹ thuật viên (bao gồm điều động, luân chuyển, bổ nhiệm, bổ nhiệm lại, miễn nhiệm, bãi nhiệm, nghỉ việc, thôi việc và nghỉ hưu) được thực hiện…"},
+        {"code":"3.2","title":"Hệ thống thăng tiến và bổ nhiệm các chức danh của đội ngũ giảng viên được thiết lập và vận hành hiệu quả."},
+        {"code":"3.3","title":"Năng lực của đội ngũ giảng viên, nghiên cứu viên, chuyên viên, nhân viên, kỹ thuật viên bao gồm cả kỹ năng lãnh đạo được xác định, chuẩn hóa và triển khai."},
+        {"code":"3.4","title":"Nhu cầu đào tạo, bồi dưỡng, phát triển đội ngũ giảng viên, nghiên cứu viên, chuyên viên, nhân viên, kỹ thuật viên được xác định và có các hoạt động được triển khai để đáp ứng nhu cầu này."},
+        {"code":"3.5","title":"Hệ thống quản lý thực hiện hiệu quả nhiệm vụ, bao gồm chế độ khen thưởng, ghi nhận và kế hoạch đào tạo, bồi dưỡng, phát triển đội ngũ được triển khai để thúc đẩy và hỗ trợ các hoạt động đào tạo, nghiên cứu khoa học, kết nối và phục vụ cộng đồng."}]},
+      {"code":"4","title":"Nguồn lực tài chính và vật chất","criteria":[
+        {"code":"4.1","title":"Hệ thống quản lý tài chính hoạt động hiệu quả trong việc lập kế hoạch, triển khai, kiểm toán và cải tiến việc sử dụng các nguồn lực tài chính, nhằm hỗ trợ CSĐT trong việc thực hiện tầm nhìn, sứ mạng và các mục tiêu chiến lược…"},
+        {"code":"4.2","title":"Việc lập kế hoạch, bảo trì, nâng cấp và mở rộng cơ sở vật chất, hạ tầng được thực hiện hiệu quả nhằm đáp ứng nhu cầu hiện tại và tương lai của CSĐT về đào tạo, nghiên cứu khoa học, kết nối và phục vụ cộng đồng."},
+        {"code":"4.3","title":"CSĐT có hệ thống vận hành hiệu quả trong việc lập kế hoạch, bảo trì, đánh giá và nâng cấp cơ sở hạ tầng công nghệ thông tin và kết nối mạng, đáp ứng nhu cầu hiện tại của CSĐT và dự báo…"},
+        {"code":"4.4","title":"CSĐT có hệ thống vận hành hiệu quả trong việc lập kế hoạch, bảo trì, đánh giá và cải tiến các nguồn lực học thuật như thư viện, học liệu giảng dạy, cơ sở dữ liệu trực tuyến,…"},
+        {"code":"4.5","title":"Hệ thống lập kế hoạch, triển khai, đánh giá và cải tiến các điều kiện môi trường, y tế, an toàn và khả năng tiếp cận cho người có nhu cầu đặc biệt được vận hành hiệu quả; bảo đảm tuân thủ quy định pháp luật."}]},
+      {"code":"5","title":"Các mạng lưới và quan hệ đối ngoại","criteria":[
+        {"code":"5.1","title":"CSĐT có các chính sách, kế hoạch chiến lược và quy trình để tăng cường quan hệ đối ngoại, phát triển mạng lưới và quan hệ đối tác với doanh nghiệp, hiệp hội nghề nghiệp, cựu người học, các tổ chức chính phủ và phi chính phủ trong và ngoài nước."},
+        {"code":"5.2","title":"Các kế hoạch đối ngoại của CSĐT được triển khai và phù hợp với việc đạt được tầm nhìn, sứ mạng và các mục tiêu chiến lược của CSĐT."}]},
+      {"code":"6","title":"Các chính sách về đào tạo","criteria":[
+        {"code":"6.1","title":"Các kế hoạch, chính sách và tiêu chí tuyển chọn người học vào từng chương trình đào tạo được xây dựng, triển khai, giám sát và cải tiến nhằm bảo đảm tính phù hợp và hiệu quả."},
+        {"code":"6.2","title":"CSĐT có quy trình thiết kế và phát triển chương trình đào tạo, trong đó chuẩn đầu ra của tất cả các chương trình đào tạo được xây dựng, triển khai, rà soát và cập nhật một cách có hệ thống, để phù hợp với nhu cầu của các bên liên quan."},
+        {"code":"6.3","title":"CSĐT có hệ thống để lựa chọn các hoạt động dạy và học phù hợp với triết lý giáo dục và đạt được các chuẩn đầu ra."},
+        {"code":"6.4","title":"Các hoạt động dạy và học được giám sát và đánh giá nhằm bảo đảm chất lượng và cải tiến chất lượng."},
+        {"code":"6.5","title":"Các hoạt động dạy và học thúc đẩy tự học tập, học tập suốt đời, tư duy sáng tạo, tinh thần khởi nghiệp, được thiết kế phù hợp và gắn kết với việc đạt được các chuẩn đầu ra."},
+        {"code":"6.6","title":"CSĐT có hệ thống để lựa chọn các hình thức đánh giá người học phù hợp và gắn kết với việc đạt được các chuẩn đầu ra."},
+        {"code":"6.7","title":"Các dịch vụ và hoạt động hỗ trợ người học phù hợp được triển khai, giám sát và đáp ứng nhu cầu của các bên liên quan."}]},
+      {"code":"7","title":"Các chính sách về nghiên cứu khoa học","criteria":[
+        {"code":"7.1","title":"CSĐT có hệ thống hiệu quả để định hướng và giám sát hoạt động nghiên cứu khoa học ở tất cả các cấp của CSĐT."},
+        {"code":"7.2","title":"Các chỉ số chính nhằm đánh giá hiệu quả thực hiện (như mức kinh phí, số lượng đề tài nghiên cứu khoa học, bài báo khoa học, bằng sáng chế, bản quyền, phát minh,...) được sử dụng để đánh giá toàn diện hoạt động nghiên cứu khoa học…"},
+        {"code":"7.3","title":"CSĐT có cơ chế khuyến khích và quản lý có hệ thống đối với hoạt động nghiên cứu xuất sắc, đặc biệt là hoạt động đổi mới sáng tạo và tinh thần khởi nghiệp."},
+        {"code":"7.4","title":"CSĐT có hệ thống dữ liệu lớn phù hợp và hiệu quả để ghi nhận, lưu trữ và phân tích toàn bộ tài sản trí tuệ của CSĐT."},
+        {"code":"7.5","title":"CSĐT có hệ thống để thiết lập, duy trì và thúc đẩy, phát triển hợp tác nghiên cứu khoa học với các tổ chức chính phủ, các CSĐT khác, các doanh nghiệp trong nước và quốc tế ở nhiều lĩnh vực chuyên môn."}]},
+      {"code":"8","title":"Các chính sách về kết nối và phục vụ cộng đồng","criteria":[
+        {"code":"8.1","title":"Các chính sách, kế hoạch, hướng dẫn về kết nối và phục vụ cộng đồng được xây dựng, triển khai, rà soát, cải tiến nhằm đáp ứng nhu cầu và sự hài lòng của các bên liên quan."},
+        {"code":"8.2","title":"Các chính sách, kế hoạch, hướng dẫn về kết nối và phục vụ cộng đồng phù hợp với định hướng phát triển của quốc gia, được triển khai, rà soát và cải tiến."},
+        {"code":"8.3","title":"Các chính sách, kế hoạch, hướng dẫn về kết nối và phục vụ cộng đồng thể hiện sự đóng góp cho một tương lai toàn cầu vì lợi ích chung và bền vững hơn, đồng thời góp phần bảo vệ môi trường."}]},
+      {"code":"9","title":"Hệ thống bảo đảm chất lượng","criteria":[
+        {"code":"9.1","title":"CSĐT có đơn vị chuyên trách với vai trò và trách nhiệm trong điều phối, giám sát các hoạt động bảo đảm chất lượng bên trong và bên ngoài."},
+        {"code":"9.2","title":"CSĐT xây dựng kế hoạch bảo đảm chất lượng, trong đó thể hiện rõ cam kết và sự tham gia của các bên liên quan nhằm hướng đến mức độ bảo đảm chất lượng cao hơn."},
+        {"code":"9.3","title":"Kế hoạch bảo đảm chất lượng được quán triệt và chuyển tải vào các kế hoạch hành động ngắn hạn và dài hạn để triển khai ở tất cả các cấp của CSĐT."},
+        {"code":"9.4","title":"CSĐT xác lập rõ ràng các chỉ số chính nhằm đánh giá hiệu quả thực hiện và chỉ tiêu để đo lường hiệu quả hoạt động bảo đảm chất lượng; kết quả đo lường được công bố kịp thời đến các bên liên quan để phục vụ phản hồi và cải tiến."}]},
+      {"code":"10","title":"Hệ thống thông tin bảo đảm chất lượng bên trong","criteria":[
+        {"code":"10.1","title":"CSĐT có hệ thống quản lý thông tin hiệu quả để thu thập, xử lý và báo cáo các chỉ số chính nhằm đánh giá hiệu quả thực hiện, các chỉ tiêu về chiến lược và bảo đảm chất lượng."},
+        {"code":"10.2","title":"Hệ thống quản lý thông tin bảo đảm chất lượng có chức năng phân tích dữ liệu và cho phép các bên liên quan truy cập dễ dàng để hỗ trợ việc ra quyết định, đồng thời phải bảo đảm tính toàn vẹn và hữu ích của thông tin."}]},
+      {"code":"11","title":"Nâng cao chất lượng","criteria":[
+        {"code":"11.1","title":"CSĐT có kế hoạch liên tục tăng cường hệ thống bảo đảm chất lượng, bao gồm các hoạt động đối sánh, nghiên cứu so sánh nhằm xác định các thực hành tốt trong đào tạo, nghiên cứu khoa học, kết nối và phục vụ cộng đồng."},
+        {"code":"11.2","title":"CSĐT thiết lập các chỉ số đối sánh và so sánh từ nhiều nguồn và sử dụng các chỉ số này trong hoạt động tự đánh giá và cải tiến các hoạt động bảo đảm chất lượng."}]},
+      {"code":"12","title":"Các kết quả về đào tạo","criteria":[
+        {"code":"12.1","title":"Các chỉ số về kết quả đầu ra như tỉ lệ tốt nghiệp, tỉ lệ thôi học, thời gian tốt nghiệp trung bình và mức độ đạt chuẩn đầu ra của tất cả các chương trình đào tạo được xác lập, giám sát và đối sánh để cải tiến."},
+        {"code":"12.2","title":"Tình hình việc làm, khởi nghiệp và các nguyện vọng nghề nghiệp khác của người học tốt nghiệp được xác lập, giám sát và đối sánh để cải tiến."},
+        {"code":"12.3","title":"Các chỉ số về kết quả đầu ra và về tác động dài hạn, như mức độ đóng góp cho sự phát triển quốc gia và các mục tiêu phát triển bền vững, được xác lập, giám sát và đối sánh để cải tiến."},
+        {"code":"12.4","title":"Mức độ hài lòng của các bên liên quan đối với chất lượng người học tốt nghiệp được xác lập, giám sát và đối sánh để cải tiến."}]},
+      {"code":"13","title":"Các kết quả về nghiên cứu khoa học","criteria":[
+        {"code":"13.1","title":"Nguồn kinh phí và phân bổ kinh phí cho hoạt động nghiên cứu khoa học của CSĐT được xác lập, giám sát và đối sánh để cải tiến."},
+        {"code":"13.2","title":"Loại hình và số lượng của các sản phẩm nghiên cứu khoa học và các tài sản trí tuệ khác do đội ngũ giảng viên, nghiên cứu viên và người học tạo ra được xác lập, giám sát và đối sánh để cải tiến."},
+        {"code":"13.3","title":"Kết quả nghiên cứu khoa học và đổi mới sáng tạo trong kinh doanh, bao gồm khởi nghiệp, ươm tạo khởi nghiệp, thương mại hóa, được xác lập, giám sát và đối sánh để cải tiến."},
+        {"code":"13.4","title":"Hoạt động nghiên cứu khoa học của CSĐT có đóng góp vào sự phát triển quốc gia và phù hợp với các mục tiêu phát triển bền vững."}]},
+      {"code":"14","title":"Các kết quả về kết nối và phục vụ cộng đồng","criteria":[
+        {"code":"14.1","title":"Loại hình và số lượng hoạt động kết nối, phục vụ cộng đồng và đóng góp cho xã hội được xác lập, giám sát và đối sánh để cải tiến."},
+        {"code":"14.2","title":"Tác động xã hội và kết quả của các hoạt động kết nối, phục vụ cộng đồng, đóng góp cho xã hội và các mục tiêu phát triển bền vững được xác lập, giám sát và đối sánh để cải tiến."},
+        {"code":"14.3","title":"Tác động đối với người học và đội ngũ giảng viên, nhân viên từ các hoạt động kết nối, phục vụ cộng đồng, đóng góp cho xã hội và các mục tiêu phát triển bền vững được xác lập, giám sát và đối sánh để cải tiến."},
+        {"code":"14.4","title":"Mức độ hài lòng của các bên liên quan đối với các hoạt động kết nối, phục vụ cộng đồng, đóng góp cho xã hội và cho các mục tiêu phát triển bền vững được xác lập, giám sát và đối sánh để cải tiến."}]},
+      {"code":"15","title":"Các kết quả về tài chính và thị trường","criteria":[
+        {"code":"15.1","title":"Các chỉ số hiệu quả tài chính cho hoạt động đào tạo, nghiên cứu khoa học, kết nối và phục vụ cộng đồng được xác lập, giám sát và đối sánh để cải tiến."},
+        {"code":"15.2","title":"Các chỉ số kết quả và vị thế trên thị trường đối với hoạt động đào tạo, nghiên cứu khoa học, kết nối và phục vụ cộng đồng được xác lập, giám sát và đối sánh nhằm cải tiến chất lượng."}]}
+    ]
+  }
+]

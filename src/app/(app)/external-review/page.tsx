@@ -20,7 +20,7 @@ export default async function ExternalReviewPage({ searchParams }: { searchParam
   const cycle = selected
     ? await prisma.accreditationCycle.findFirst({
         where: { programId: selected.id },
-        orderBy: { year: "desc" },
+        orderBy: [{ year: "desc" }, { createdAt: "desc" }],
         include: {
           standardSet: {
             include: { standards: { orderBy: { order: "asc" }, include: { criteria: { orderBy: { order: "asc" } } } } },

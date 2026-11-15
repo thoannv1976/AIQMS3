@@ -29,7 +29,7 @@ export async function createTask(_prev: FormState, formData: FormData): Promise<
 
   if (!title) return { error: "Vui lòng nhập tiêu đề nhiệm vụ." };
 
-  const cycle = programId ? await prisma.accreditationCycle.findFirst({ where: { programId }, orderBy: { year: "desc" } }) : null;
+  const cycle = programId ? await prisma.accreditationCycle.findFirst({ where: { programId }, orderBy: [{ year: "desc" }, { createdAt: "desc" }] }) : null;
 
   await prisma.task.create({
     data: {
