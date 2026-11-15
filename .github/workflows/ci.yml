@@ -8,6 +8,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Dummy URL: prisma.config.ts resolves env("DATABASE_URL") even for `prisma generate`.
+      # No database is contacted during CI.
+      DATABASE_URL: postgresql://user:pass@localhost:5432/db?schema=public
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
