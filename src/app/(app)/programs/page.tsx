@@ -7,7 +7,7 @@ import { getProgramStats } from "@/lib/metrics";
 import { Card, LinkButton, PageHeader, Badge, EmptyState, Th, Td } from "@/components/ui";
 import { Progress } from "@/components/widgets";
 import { degreeLevel as degreeLabel } from "@/lib/labels";
-import { allowedProgramIds, canAccessProgram } from "@/lib/access";
+import { allowedProgramIds } from "@/lib/access";
 
 export default async function ProgramsPage() {
   const user = await requireUser();

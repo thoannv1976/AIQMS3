@@ -7,7 +7,7 @@ import { Progress } from "@/components/widgets";
 import { reportStatus } from "@/lib/labels";
 import { ReportSectionStatus } from "@/generated/prisma/enums";
 import { pct } from "@/lib/utils";
-import { allowedProgramIds, canAccessProgram } from "@/lib/access";
+import { allowedProgramIds } from "@/lib/access";
 
 export default async function ReportsPage() {
   const user = await requireUser();

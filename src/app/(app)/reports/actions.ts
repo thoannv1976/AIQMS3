@@ -88,7 +88,7 @@ async function evidenceForSection(sectionId: string) {
   });
   if (!section) return null;
 
-  let evidenceSummaries: string[] = [];
+  const evidenceSummaries: string[] = [];
   let linkedEvidenceCount = 0;
   const excluded: string[] = [];
   const critIds = await sectionCriterionIds(section);

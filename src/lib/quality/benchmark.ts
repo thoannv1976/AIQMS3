@@ -18,8 +18,12 @@ export interface ProgramBenchmark {
   obeAvg: number | null;
 }
 
-export async function getBenchmark(): Promise<ProgramBenchmark[]> {
+export async function getBenchmark(opts: { programIds?: string[] | null; facultyId?: string | null } = {}): Promise<ProgramBenchmark[]> {
   const programs = await prisma.program.findMany({
+    where: {
+      ...(opts.programIds ? { id: { in: opts.programIds } } : {}),
+      ...(opts.facultyId ? { facultyId: opts.facultyId } : {}),
+    },
     orderBy: { createdAt: "asc" },
     select: { id: true, code: true, nameVi: true },
   });
