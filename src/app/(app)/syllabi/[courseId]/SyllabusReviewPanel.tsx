@@ -5,6 +5,7 @@ import { Sparkles, CheckCircle2, XCircle } from "lucide-react";
 import { Button, Badge } from "@/components/ui";
 import type { BadgeColor } from "@/components/ui";
 import { Progress } from "@/components/widgets";
+import { Markdown } from "@/components/markdown";
 import { reviewSyllabusAction, type SyllabusReviewResult } from "./actions";
 
 const BAND_COLOR: Record<string, BadgeColor> = { strong: "green", adequate: "blue", weak: "amber", missing: "red" };
@@ -66,9 +67,9 @@ export function SyllabusReviewPanel({ courseId }: { courseId: string }) {
             </ul>
           )}
 
-          <p className="prose-ai mt-3 whitespace-pre-wrap border-t border-slate-100 pt-3 text-sm text-slate-700">
-            {result.text}
-          </p>
+          <div className="mt-3 border-t border-slate-100 pt-3 text-sm text-slate-700">
+            <Markdown text={result.text ?? ""} />
+          </div>
         </div>
       )}
     </div>

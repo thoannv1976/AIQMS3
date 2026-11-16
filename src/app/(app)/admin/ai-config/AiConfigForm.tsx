@@ -1,100 +1,182 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
-import { Zap } from "lucide-react";
-import { Button, Input, Label, Select } from "@/components/ui";
-import { saveAiConfigAction, testConnectionAction, type ConfigFormState } from "./actions";
+import { useState, useTransition } from "react";
+import { Zap, Save, Trash2, Loader2, Plus, RefreshCw } from "lucide-react";
+import { Button, Input, Label, Select, Badge } from "@/components/ui";
+import { saveKeyAction, testConnectionAction, saveRoutingAction, saveBudgetAction, savePricesAction, recalcCostsAction, type ActionMsg } from "./actions";
 import type { ConnectionTestResult } from "@/lib/ai/client";
 
-const MODELS = ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"];
+type P = "anthropic" | "openai" | "gemini";
+export interface ProviderView { id: P; label: string; keyHint: string; last4: string | null; source: "db" | "env" | "none"; suggested: string[]; consoleUrl: string }
+export interface RoutingView { mode: string; high: { provider: P; model: string }; economy: { provider: P; model: string }; fallback: P[] }
 
-export function AiConfigForm({
-  current,
-}: {
-  current: { model: string; mode: string; keySource: "db" | "env" | "none"; apiKeyLast4: string | null };
-}) {
-  const [state, formAction, pending] = useActionState<ConfigFormState, FormData>(saveAiConfigAction, {});
-  const [testing, startTest] = useTransition();
-  const [test, setTest] = useState<ConnectionTestResult | null>(null);
+function Msg({ m }: { m: ActionMsg | null }) {
+  if (!m) return null;
+  return <span className={`text-xs ${m.ok ? "text-green-700" : "text-red-600"}`}>{m.message}</span>;
+}
 
-  const sourceLabel =
-    current.keySource === "db" ? "CSDL" : current.keySource === "env" ? "biến môi trường" : null;
+/** API keys for the three providers + tier routing (models discovered by "Kiểm tra" feed the pickers). */
+export function ProvidersAndRouting({ providers, routing }: { providers: ProviderView[]; routing: RoutingView }) {
+  const [found, setFound] = useState<Record<string, string[]>>({});
+  const [tests, setTests] = useState<Record<string, ConnectionTestResult | null>>({});
+  const [msgs, setMsgs] = useState<Record<string, ActionMsg | null>>({});
+  const [keys, setKeys] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const [routeMsg, setRouteMsg] = useState<ActionMsg | null>(null);
+  const [hiP, setHiP] = useState<P>(routing.high.provider);
+  const [ecoP, setEcoP] = useState<P>(routing.economy.provider);
+  const modelsFor = (p: P) => [...new Set([...(found[p] ?? []), ...(providers.find((x) => x.id === p)?.suggested ?? [])])];
+  const run = (k: string, fn: () => Promise<void>) => { setBusy(k); start(async () => { await fn(); setBusy(null); }); };
 
   return (
-    <form action={formAction} className="space-y-4">
-      <div>
-        <Label htmlFor="apiKey">Nạp/đổi Claude API key</Label>
-        <Input
-          id="apiKey"
-          name="apiKey"
-          type="password"
-          autoComplete="off"
-          placeholder="sk-ant-... (để trống = giữ key hiện tại)"
-        />
-        <p className="mt-1 text-xs text-slate-500">
-          Key được mã hóa AES-256-GCM trước khi lưu vào CSDL.{" "}
-          {sourceLabel
-            ? `Hiện dùng ••••${current.apiKeyLast4 ?? ""} (nguồn: ${sourceLabel}).`
-            : "Chưa cấu hình key."}
-        </p>
+    <div className="space-y-5">
+      <div className="grid gap-4 lg:grid-cols-3">
+        {providers.map((p) => (
+          <div key={p.id} className="space-y-2 rounded-lg border border-slate-200 p-3">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-slate-800">{p.label}</span>
+              {p.source === "none" ? <Badge color="slate">Chưa có key</Badge> : <Badge color="green">••••{p.last4} ({p.source === "db" ? "CSDL" : "biến môi trường"})</Badge>}
+            </div>
+            <Input type="password" autoComplete="off" placeholder={`${p.keyHint} (để trống = giữ key hiện tại)`} value={keys[p.id] ?? ""} onChange={(e) => setKeys({ ...keys, [p.id]: e.target.value })} />
+            <div className="flex flex-wrap gap-1.5">
+              <Button size="sm" disabled={pending || !(keys[p.id] ?? "").trim()} onClick={() => run("k" + p.id, async () => { const m = await saveKeyAction(p.id, keys[p.id] ?? ""); setMsgs({ ...msgs, [p.id]: m }); if (m.ok) setKeys({ ...keys, [p.id]: "" }); })}>
+                {busy === "k" + p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Lưu key
+              </Button>
+              <Button size="sm" variant="outline" disabled={pending || p.source === "none"} onClick={() => run("t" + p.id, async () => { const r = await testConnectionAction(p.id); setTests({ ...tests, [p.id]: r }); if (r.models) setFound({ ...found, [p.id]: r.models }); })}>
+                {busy === "t" + p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />} Kiểm tra
+              </Button>
+              {p.source === "db" && (
+                <Button size="sm" variant="ghost" disabled={pending} onClick={() => { if (confirm(`Xóa key ${p.label}?`)) run("d" + p.id, async () => setMsgs({ ...msgs, [p.id]: await saveKeyAction(p.id, null) })); }}>
+                  <Trash2 className="h-4 w-4 text-red-500" />
+                </Button>
+              )}
+            </div>
+            <Msg m={msgs[p.id] ?? null} />
+            {tests[p.id] && (
+              <div className={`rounded px-2 py-1.5 text-xs ${tests[p.id]!.ok ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700"}`}>
+                {tests[p.id]!.message}
+                {tests[p.id]!.models && <div className="mt-1 text-slate-600">{tests[p.id]!.models!.length} mô hình khả dụng – đã đưa vào danh sách chọn bên dưới.</div>}
+              </div>
+            )}
+            <a href={p.consoleUrl} target="_blank" rel="noreferrer" className="block text-xs text-brand-700 hover:underline">Lấy key / xem số dư →</a>
+          </div>
+        ))}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <Label htmlFor="model">Model</Label>
-          <Input id="model" name="model" list="ai-model-list" defaultValue={current.model} />
-          <datalist id="ai-model-list">
-            {MODELS.map((m) => (
-              <option key={m} value={m} />
-            ))}
-          </datalist>
+      <form className="space-y-3 rounded-lg border border-slate-200 p-3" onSubmit={(e) => { e.preventDefault(); const fd = new FormData(e.currentTarget); run("route", async () => setRouteMsg(await saveRoutingAction(fd))); }}>
+        <div className="font-semibold text-slate-800">Phân tầng mô hình</div>
+        {(
+          [
+            ["high", "Chất lượng cao", "Soạn/rà soát SAR, câu hỏi phỏng vấn, bản tin lãnh đạo, phân tích khảo sát, trợ lý AI…", hiP, setHiP, routing.high.model],
+            ["economy", "Tiết kiệm", "Gợi ý tiêu chí, tóm tắt, AI kiểm tra minh chứng, OCR, đề xuất số liệu, nhập đề cương…", ecoP, setEcoP, routing.economy.model],
+          ] as const
+        ).map(([t, label, hint, prov, setProv, model]) => (
+          <div key={t} className="grid items-end gap-2 md:grid-cols-[180px_1fr_1fr]">
+            <div><Label>{label}</Label><p className="text-[11px] leading-tight text-slate-500">{hint}</p></div>
+            <div>
+              <Label>Nhà cung cấp</Label>
+              <Select name={`${t}Provider`} value={prov} onChange={(e) => setProv(e.target.value as P)}>
+                {providers.map((p) => <option key={p.id} value={p.id}>{p.label}{p.source === "none" ? " (chưa có key)" : ""}</option>)}
+              </Select>
+            </div>
+            <div>
+              <Label>Mô hình</Label>
+              <Input name={`${t}Model`} list={`models-${t}`} defaultValue={model} key={`${t}-${prov}`} placeholder="Chọn hoặc gõ mã mô hình" />
+              <datalist id={`models-${t}`}>{modelsFor(prov).map((m) => <option key={m} value={m} />)}</datalist>
+            </div>
+          </div>
+        ))}
+        <div className="grid gap-2 md:grid-cols-4">
+          <div>
+            <Label>Chế độ</Label>
+            <Select name="mode" defaultValue={routing.mode}>
+              <option value="auto">Tự động (có key → gọi AI)</option>
+              <option value="real">Bắt buộc gọi AI</option>
+              <option value="mock">Mô phỏng (luôn dự phòng)</option>
+            </Select>
+          </div>
+          {[0, 1, 2].map((i) => (
+            <div key={i}>
+              <Label>Dự phòng {i + 1}</Label>
+              <Select name={`fb${i + 1}`} defaultValue={routing.fallback[i] ?? ""}>
+                <option value="">—</option>
+                {providers.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+              </Select>
+            </div>
+          ))}
         </div>
-        <div>
-          <Label htmlFor="mode">Chế độ</Label>
-          <Select id="mode" name="mode" defaultValue={current.mode}>
-            <option value="auto">Tự động (có key → Claude)</option>
-            <option value="real">Bắt buộc dùng Claude</option>
-            <option value="mock">Mô phỏng (luôn dự phòng)</option>
-          </Select>
+        <p className="text-xs text-slate-500">Khi nhà cung cấp chính lỗi (hết credit, quá tải, sai mô hình), hệ thống tự thử lần lượt các nhà cung cấp dự phòng đã có key, trước khi dùng chế độ quy tắc.</p>
+        <div className="flex items-center gap-3">
+          <Button type="submit" disabled={pending}>{busy === "route" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Lưu phân tầng</Button>
+          <Msg m={routeMsg} />
         </div>
+      </form>
+    </div>
+  );
+}
+
+export function BudgetForm({ budget, autoEvidenceCheck, rate }: { budget: { monthlyUsd: number | null; dailyUsd: number | null; perUserDailyUsd: number | null; warnPct: number }; autoEvidenceCheck: boolean; rate: number }) {
+  const [unit, setUnit] = useState<"usd" | "vnd">("usd");
+  const [msg, setMsg] = useState<ActionMsg | null>(null);
+  const [pending, start] = useTransition();
+  const show = (v: number | null) => (v === null ? "" : unit === "usd" ? String(v) : String(Math.round(v * rate)));
+  return (
+    <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); const fd = new FormData(e.currentTarget); start(async () => setMsg(await saveBudgetAction(fd))); }}>
+      <input type="hidden" name="unit" value={unit} />
+      <div className="flex items-center gap-2 text-sm">
+        <span className="text-slate-600">Đơn vị nhập:</span>
+        {(["usd", "vnd"] as const).map((u) => (
+          <button type="button" key={u} onClick={() => setUnit(u)} className={`rounded px-2 py-0.5 text-xs ${unit === u ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-700"}`}>{u.toUpperCase()}</button>
+        ))}
       </div>
-
-      {current.keySource === "db" && (
-        <label className="flex items-center gap-2 text-sm text-slate-600">
-          <input type="checkbox" name="clearKey" className="h-4 w-4 rounded border-slate-300" />
-          Xóa API key đang lưu trong CSDL (quay về dùng biến môi trường nếu có)
-        </label>
-      )}
-
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="submit" disabled={pending}>
-          {pending ? "Đang lưu…" : "Lưu cấu hình AI"}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={testing}
-          onClick={() => startTest(async () => setTest(await testConnectionAction()))}
-        >
-          <Zap className="h-4 w-4" />
-          {testing ? "Đang kiểm tra…" : "Kiểm tra kết nối Claude"}
-        </Button>
+      <div className="grid gap-3 sm:grid-cols-4" key={unit}>
+        <div><Label>Hạn mức tháng</Label><Input name="monthly" inputMode="decimal" defaultValue={show(budget.monthlyUsd)} placeholder="Không giới hạn" /></div>
+        <div><Label>Hạn mức ngày</Label><Input name="daily" inputMode="decimal" defaultValue={show(budget.dailyUsd)} placeholder="Không giới hạn" /></div>
+        <div><Label>Mỗi người / ngày</Label><Input name="perUser" inputMode="decimal" defaultValue={show(budget.perUserDailyUsd)} placeholder="Không giới hạn" /></div>
+        <div><Label>Cảnh báo ở (%)</Label><Input name="warnPct" inputMode="numeric" defaultValue={String(Math.round(budget.warnPct * 100))} /></div>
       </div>
-
-      {state.message && <p className="text-sm font-medium text-green-700">{state.message}</p>}
-      {state.error && <p className="text-sm font-medium text-red-700">{state.error}</p>}
-      {test && (
-        <div
-          className={`rounded-lg border px-3 py-2 text-sm ${
-            test.ok ? "border-green-200 bg-green-50 text-green-800" : "border-red-200 bg-red-50 text-red-800"
-          }`}
-        >
-          {test.message}
-          {test.ok && test.inputTokens != null
-            ? ` (input ${test.inputTokens} · output ${test.outputTokens} tokens)`
-            : ""}
-        </div>
-      )}
+      <label className="flex items-center gap-2 text-sm text-slate-700">
+        <input type="checkbox" name="autoEvidenceCheck" defaultChecked={autoEvidenceCheck} /> Tự động cho AI kiểm tra minh chứng khi tải lên (mức Tiết kiệm)
+      </label>
+      <p className="text-xs text-slate-500">Để trống = không giới hạn. Khi chạm hạn mức, mọi tính năng AI tạm dùng chế độ quy tắc và báo rõ lý do; Admin nhận thông báo khi chi tiêu vượt ngưỡng cảnh báo. 1 USD ≈ {new Intl.NumberFormat("vi-VN").format(rate)}đ.</p>
+      <div className="flex items-center gap-3">
+        <Button type="submit" disabled={pending}>{pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Lưu hạn mức</Button>
+        <Msg m={msg} />
+      </div>
     </form>
+  );
+}
+
+export function PriceTable({ rows: initial }: { rows: Array<{ model: string; builtin: { input: number; output: number } | null; override: { input: number; output: number } | null; used: boolean }> }) {
+  const [rows, setRows] = useState(initial.map((r) => ({ ...r, input: r.override ? String(r.override.input) : "", output: r.override ? String(r.override.output) : "" })));
+  const [msg, setMsg] = useState<ActionMsg | null>(null);
+  const [pending, start] = useTransition();
+  const set = (i: number, k: "model" | "input" | "output", v: string) => setRows(rows.map((r, j) => (j === i ? { ...r, [k]: v } : r)));
+  return (
+    <div className="space-y-3">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead><tr className="text-left text-xs text-slate-500"><th className="py-1">Mô hình</th><th>Giá có sẵn (vào / ra, $/1M token)</th><th>Giá tùy chỉnh – vào</th><th>ra</th></tr></thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i} className="border-t border-slate-100">
+                <td className="py-1 pr-2">{initial[i] ? <span className="font-mono text-xs">{r.model}</span> : <Input value={r.model} onChange={(e) => set(i, "model", e.target.value)} className="h-8 text-xs" placeholder="mã mô hình" />}{r.used && <Badge color="blue">đang dùng</Badge>}</td>
+                <td className="pr-2 text-xs">{r.builtin ? `$${r.builtin.input} / $${r.builtin.output}` : <span className="text-amber-700">chưa có – ước tính $5 / $25</span>}</td>
+                <td className="pr-2"><Input value={r.input} onChange={(e) => set(i, "input", e.target.value)} className="h-8 w-24 text-xs" placeholder="—" /></td>
+                <td><Input value={r.output} onChange={(e) => set(i, "output", e.target.value)} className="h-8 w-24 text-xs" placeholder="—" /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="ghost" onClick={() => setRows([...rows, { model: "", builtin: null, override: null, used: false, input: "", output: "" }])}><Plus className="h-4 w-4" /> Thêm mô hình</Button>
+        <Button size="sm" disabled={pending} onClick={() => start(async () => setMsg(await savePricesAction(rows.map((r) => ({ model: r.model, input: r.input, output: r.output })))))}><Save className="h-4 w-4" /> Lưu đơn giá</Button>
+        <Button size="sm" variant="outline" disabled={pending} title="Tính lại chi phí mọi lượt gọi đã ghi theo bảng giá hiện tại" onClick={() => { if (confirm("Tính lại chi phí của toàn bộ lịch sử gọi AI theo bảng giá hiện tại?")) start(async () => setMsg(await recalcCostsAction())); }}><RefreshCw className="h-4 w-4" /> Tính lại chi phí lịch sử</Button>
+        <Msg m={msg} />
+      </div>
+      <p className="text-xs text-slate-500">Giá Claude có sẵn theo bảng giá Anthropic (11/2026). Giá OpenAI/Gemini thay đổi thường xuyên – nhập theo trang giá của nhà cung cấp. Để trống ô tùy chỉnh = dùng giá có sẵn.</p>
+    </div>
   );
 }

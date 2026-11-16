@@ -687,7 +687,10 @@ ${truncate(input.text, 6000)}
 
 Trả lời DUY NHẤT một đối tượng JSON, không kèm giải thích:
 {"relevance":"high|partial|low","outdated":true|false,"issueYear":<năm ban hành hoặc null>,"notes":["tối đa 3 ghi chú ngắn cho người duyệt"]}
-Tiêu chí đánh giá: relevance=low nếu nội dung không liên quan tiêu chí được gán (VD thông báo nghỉ lễ gán cho tiêu chí cơ sở vật chất); outdated=true nếu văn bản đã quá cũ so với chu kỳ đánh giá, căn cứ vào văn bản pháp lý đã bị thay thế, hoặc ban hành trước khi chương trình/đơn vị tồn tại. Nếu chưa gán tiêu chí thì relevance theo mức hữu ích chung cho kiểm định.`,
+Tiêu chí đánh giá:
+- relevance=low nếu nội dung không liên quan tiêu chí được gán (VD thông báo nghỉ lễ gán cho tiêu chí cơ sở vật chất); nếu chưa gán tiêu chí thì đánh giá theo mức hữu ích chung cho kiểm định.
+- outdated=true CHỈ KHI có căn cứ cụ thể trong văn bản: văn bản đã bị thay thế/bãi bỏ; căn cứ pháp lý chính đã hết hiệu lực (VD quy chế đào tạo theo QĐ 43/2007/QĐ-BGDĐT đã được thay bằng TT 08/2021/TT-BGDĐT); hoặc áp dụng cho khóa/năm học đã kết thúc mà không còn giá trị cho chu kỳ hiện tại.
+- Tuổi văn bản tự nó KHÔNG làm văn bản hết hiệu lực: quyết định mở ngành, ban hành CTĐT/chuẩn đầu ra, quy chế, kế hoạch nhiều năm, báo cáo số liệu các năm trong chu kỳ 5 năm vẫn là minh chứng hợp lệ. Khi chỉ muốn nhắc người duyệt kiểm tra phiên bản mới hơn, để outdated=false và ghi vào notes.`,
     fallback: () => JSON.stringify(heuristic),
   });
   if (res.usedFallback) return heuristic;
