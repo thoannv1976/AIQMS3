@@ -11,7 +11,8 @@ import { APPROVED_LIKE, validityState } from "../access";
 export function extractCitationCodes(text: string): string[] {
   const out = new Set<string>();
   for (const m of text.matchAll(/\[([A-Za-z]{1,4}[-_.]?\d[\w.\-]*)\]/g)) out.add(m[1].trim());
-  for (const m of text.matchAll(/\[([A-Za-z0-9]+(?:[-_.][A-Za-z0-9]+){2,})\]/g)) {
+  // A trailing separator is allowed: bulk-upload codes are cut at 24 chars ("04-MA-TRAN-HOC-PHAN-PLO-").
+  for (const m of text.matchAll(/\[([A-Za-z0-9]+(?:[-_.][A-Za-z0-9]+){2,}[-_.]?)\]/g)) {
     if (/\d/.test(m[1])) out.add(m[1].trim());
   }
   return [...out];
