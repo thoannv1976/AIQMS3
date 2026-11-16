@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { X, FileText, Download, RefreshCw, Lock, Unlock, Copy, ScanText, History } from "lucide-react";
+import { X, FileText, Download, RefreshCw, Lock, Unlock, Copy, ScanText, History, ShieldCheck } from "lucide-react";
+import { recheckEvidenceAction } from "../bulk-actions";
+import type { EvidenceCheck } from "@/lib/ai/features";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { canInProgram } from "@/lib/rbac";
@@ -77,6 +79,7 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
   const programRoles = await programRolesOf(user.id, evidence.programId);
   const canApproveRole = canInProgram(user.role, programRoles, "evidence:approve");
   const canWrite = canInProgram(user.role, programRoles, "evidence:write") && !evidence.locked;
+  const aiCheck = (evidence.aiCheck ?? null) as EvidenceCheck | null;
   const canApprove = canApproveRole && !evidence.locked;
 
   const strength = evidenceStrength({
@@ -297,6 +300,39 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
         </div>
 
         <div className="space-y-6">
+          {(evidence.aiCheckedAt || canWrite) && (
+            <Card>
+              <CardHeader className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-1.5"><ShieldCheck className="h-4 w-4" /> AI kiểm tra minh chứng</CardTitle>
+                {canWrite && (
+                  <form action={recheckEvidenceAction.bind(null, evidence.id)}>
+                    <Button type="submit" size="sm" variant="ghost">{evidence.aiCheckedAt ? "Kiểm tra lại" : "Kiểm tra"}</Button>
+                  </form>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                {aiCheck ? (
+                  <>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge color={aiCheck.relevance === "high" ? "green" : aiCheck.relevance === "partial" ? "amber" : aiCheck.relevance === "low" ? "red" : "slate"}>
+                        Liên quan tiêu chí: {{ high: "cao", partial: "một phần", low: "thấp", unknown: "chưa rõ" }[aiCheck.relevance] ?? "chưa rõ"}
+                      </Badge>
+                      <Badge color={aiCheck.outdated ? "red" : "green"}>{aiCheck.outdated ? "Có thể cũ / hết hiệu lực" : "Còn phù hợp thời gian"}</Badge>
+                      {aiCheck.issueYear ? <Badge color="slate">Năm văn bản: {aiCheck.issueYear}</Badge> : null}
+                    </div>
+                    {aiCheck.notes?.length > 0 && <ul className="list-disc space-y-0.5 pl-5 text-slate-600">{aiCheck.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>}
+                    <p className="text-xs text-slate-400">
+                      {aiCheck.usedFallback ? "Kiểm tra theo quy tắc (chưa dùng AI)" : "Do AI kiểm tra"} lúc {formatDate(evidence.aiCheckedAt)}
+                      {aiCheck.checkedFor?.length ? ` · theo tiêu chí ${aiCheck.checkedFor.join(", ")}` : ""}. Chỉ là gợi ý cho người duyệt.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-slate-500">Chưa kiểm tra. AI sẽ đánh giá mức liên quan với tiêu chí đã gán và dấu hiệu văn bản cũ/hết hiệu lực.</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle>Trạng thái & vòng đời</CardTitle>

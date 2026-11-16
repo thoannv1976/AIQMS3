@@ -71,6 +71,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/admin/users", label: "Quản trị người dùng", labelEn: "User Management", icon: "admin", capability: "admin:users" },
       { href: "/admin/org", label: "Tổ chức (khoa, bộ môn)", labelEn: "Organisation", icon: "org", capability: "admin:users" },
       { href: "/admin/ai-config", label: "Cấu hình AI", labelEn: "AI Configuration", icon: "aiconfig", capability: "admin:settings" },
+      { href: "/admin/system", label: "Tình trạng hệ thống", labelEn: "System Status", icon: "system", capability: "admin:settings" },
     ],
   },
 ];

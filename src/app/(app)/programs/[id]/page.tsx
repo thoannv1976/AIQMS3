@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { FolderArchive, FileText, Target, ClipboardCheck } from "lucide-react";
+import { FolderArchive, FileText, Target, ClipboardCheck, FileSpreadsheet, ListChecks } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { roleLabel, can } from "@/lib/rbac";
@@ -57,6 +57,14 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
         description={`${program.faculty.name} · ${degreeLevel[program.degreeLevel]}${program.totalCredits ? ` · ${program.totalCredits} tín chỉ` : ""}`}
         actions={
           <div className="flex gap-2">
+            {canCourse && (
+              <LinkButton href={`/programs/${program.id}/import`} variant="outline">
+                <FileSpreadsheet className="h-4 w-4" /> Nhập Excel
+              </LinkButton>
+            )}
+            <LinkButton href={`/programs/${program.id}/facts`} variant="outline">
+              <ListChecks className="h-4 w-4" /> Số liệu chính
+            </LinkButton>
             <LinkButton href={`/outcomes?program=${program.id}`} variant="outline">
               <Target className="h-4 w-4" /> Chuẩn đầu ra
             </LinkButton>

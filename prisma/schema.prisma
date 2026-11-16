@@ -281,6 +281,26 @@ model Program {
   tasks              Task[]
   documents          Document[]
   chatSessions       AiChatSession[]
+  facts              ProgramFact[]
+}
+
+// Số liệu chính của chương trình (tỷ lệ việc làm, số GV…): nhập một lần, AI dùng thống nhất khi soạn SAR.
+model ProgramFact {
+  id         String   @id @default(cuid())
+  programId  String
+  program    Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  groupName  String? // nhóm: Tuyển sinh, Đội ngũ, Đầu ra…
+  label      String
+  value      String
+  unit       String?
+  period     String? // năm / khóa / học kỳ áp dụng
+  sourceCode String? // mã minh chứng nguồn, VD MC-8.2.01
+  note       String?
+  order      Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([programId])
 }
 
 model ProgramVersion {
@@ -490,6 +510,8 @@ model Evidence {
   approvedAt      DateTime?
   issuedAt        DateTime? // ngày ban hành
   validUntil      DateTime? // hiệu lực đến (null = không thời hạn)
+  aiCheck         Json? // AI kiểm tra khi tải lên: { relevant, outdated, notes, ... }
+  aiCheckedAt     DateTime?
   locked          Boolean             @default(false)
   lockedAt        DateTime?
   lockedById      String?

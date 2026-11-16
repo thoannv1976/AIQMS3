@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { can, roleLabel } from "@/lib/rbac";
-import { Card, CardContent, CardHeader, CardTitle, Badge, PageHeader, Button, Th, Td, EmptyState } from "@/components/ui";
+import { Card, CardContent, CardHeader, CardTitle, Badge, PageHeader, Button, Th, Td, EmptyState, LinkButton } from "@/components/ui";
 import { formatDate } from "@/lib/utils";
 import { CreateUserForm } from "./CreateUserForm";
 import { ProgramRoleForm } from "./ProgramRoleForm";
@@ -24,7 +24,11 @@ export default async function AdminUsersPage() {
 
   return (
     <div>
-      <PageHeader title="Quản trị người dùng" description="Quản lý tài khoản, vai trò và phân quyền theo chức năng" />
+      <PageHeader
+        title="Quản trị người dùng"
+        description="Quản lý tài khoản, vai trò và phân quyền theo chức năng"
+        actions={<LinkButton href="/admin/users/import" variant="outline">Nhập hàng loạt từ Excel</LinkButton>}
+      />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">

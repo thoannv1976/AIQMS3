@@ -5,6 +5,18 @@
 
 import { getAiConfig } from "./config";
 import { estimateCostUsd, logAiUsage } from "./usage";
+import { prisma } from "../db";
+
+export const AI_LAST_ERROR_KEY = "ai.lastError";
+
+/** Keep the latest AI failure (e.g. "credit balance is too low") so admins see why AI fell back. */
+async function recordAiError(err: unknown): Promise<void> {
+  const raw = err instanceof Error ? err.message : String(err);
+  const m = /"message"\s*:\s*"([^"]+)"/.exec(raw);
+  const message = (m?.[1] ?? raw).slice(0, 300);
+  const value = { at: new Date().toISOString(), message };
+  await prisma.appSetting.upsert({ where: { key: AI_LAST_ERROR_KEY }, update: { value }, create: { key: AI_LAST_ERROR_KEY, value } }).catch(() => {});
+}
 
 export interface AiResult {
   text: string;
@@ -93,6 +105,7 @@ export async function aiComplete(opts: {
     return { text: text || opts.fallback(), usedFallback: false, model: cfg.model, inputTokens, outputTokens };
   } catch (err) {
     console.error("[ai] Claude call failed, using fallback:", err);
+    await recordAiError(err);
     await logAiUsage({
       feature,
       model: cfg.model,

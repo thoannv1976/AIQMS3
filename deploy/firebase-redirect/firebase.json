@@ -1,0 +1,9 @@
+{
+  "hosting": {
+    "site": "aiqms3",
+    "public": "public",
+    "redirects": [
+      { "regex": "^/(.*)$", "destination": "https://aiqms3-224235551485.asia-southeast1.run.app/:1", "type": 302 }
+    ]
+  }
+}

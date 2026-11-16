@@ -116,11 +116,16 @@ export async function draftReportSection(input: {
   criterionCode?: string;
   criterionTitle: string;
   evidenceSummaries: string[];
+  facts?: string[];
   notes?: string;
 }, meta?: AiMeta): Promise<AiResult> {
+  // Blocks from evidenceContextBlocks() start with "####"; plain one-liners get a bullet.
   const evidence = input.evidenceSummaries.length
-    ? input.evidenceSummaries.map((e) => `- ${e}`).join("\n")
+    ? input.evidenceSummaries.map((e) => (e.startsWith("#") ? e : `- ${e}`)).join("\n\n")
     : "(Chưa có minh chứng được liên kết.)";
+  const facts = input.facts?.length
+    ? `\nSố liệu chính của chương trình (đã được nhà trường xác nhận – dùng đúng các giá trị này, kèm mã minh chứng nguồn nếu có):\n${input.facts.join("\n")}\n`
+    : "";
 
   return aiComplete({
     feature: "sar_draft",
@@ -137,9 +142,11 @@ Trình bày bằng Markdown với ĐÚNG 5 tiêu đề cấp 3 theo thứ tự s
 Yêu cầu: tổng cộng khoảng 500–800 từ; mỗi nhận định có số liệu hoặc khẳng định phải kèm mã minh chứng trong ngoặc vuông, đúng mã như danh sách (ví dụ [MC-1.1.01]); không bịa mã.
 Điểm mạnh và Tồn tại viết dạng gạch đầu dòng; Kế hoạch cải tiến nêu hành động, đơn vị thực hiện, thời hạn.
 Hôm nay là ${new Date().toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}: mọi thời hạn trong Kế hoạch cải tiến phải sau ngày này.
-Chỉ sử dụng thông tin từ minh chứng dưới đây; nếu thiếu dữ liệu định lượng thì ghi rõ "cần bổ sung số liệu".
+Chỉ sử dụng thông tin từ minh chứng và số liệu chính dưới đây. Đọc kỹ phần "Trích đoạn nguyên văn": ưu tiên dẫn số liệu cụ thể (số lượng, tỷ lệ %, điểm trung bình, năm, số văn bản) kèm mã minh chứng chứa số liệu đó.
+Chỉ ghi "cần bổ sung số liệu" khi cả minh chứng lẫn số liệu chính thực sự không có thông tin định lượng cho nhận định đó; khi ghi, nói rõ cần số liệu gì.
+Nếu các minh chứng mâu thuẫn số liệu với nhau, nêu rõ chỗ mâu thuẫn trong phần Tồn tại.
 Không thêm câu lưu ý/miễn trừ kiểu "đây là bản nháp do AI…" vào cuối bài (giao diện đã ghi rõ đây là bản nháp AI).
-${input.notes ? `Ghi chú: ${input.notes}\n` : ""}
+${input.notes ? `Ghi chú: ${input.notes}\n` : ""}${facts}
 Minh chứng:\n${evidence}`,
     fallback: () =>
       `# Bản nháp tiêu chí ${input.criterionCode ?? ""}: ${input.criterionTitle}\n\n` +
@@ -627,5 +634,140 @@ Viết NHẬN ĐỊNH CHO LÃNH ĐẠO (Markdown, tiếng Việt, tối đa ~350
 3. 3–5 việc ưu tiên cụ thể (ai làm, làm gì, vì sao) — ưu tiên tiêu chí điều kiện, minh chứng hết hiệu lực, việc quá hạn.
 Chỉ dựa trên số liệu được cung cấp, không bịa số liệu.`,
     fallback: () => `**Nhận định (bản quy tắc — chưa bật AI)**\n\n${metricsText}`,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Evidence quality check on upload: relevance to its criteria + outdated / superseded documents
+// ---------------------------------------------------------------------------
+export interface EvidenceCheck {
+  relevance: "high" | "partial" | "low" | "unknown";
+  outdated: boolean;
+  issueYear: number | null;
+  notes: string[];
+  usedFallback: boolean;
+  model?: string;
+  checkedFor: string[]; // criterion codes
+}
+
+/** Latest year mentioned in the text between 1990 and next year (heuristic fallback). */
+function latestYear(text: string): number | null {
+  const now = new Date().getFullYear();
+  const ys = [...text.matchAll(/\b(19[9]\d|20\d{2})\b/g)].map((m) => Number(m[1])).filter((y) => y <= now + 1);
+  return ys.length ? Math.max(...ys) : null;
+}
+
+export async function assessEvidence(
+  input: { code: string; title: string; text: string; criteria: Array<{ code: string; title: string }>; programName: string; issuedAt?: Date | null },
+  meta?: AiMeta,
+): Promise<EvidenceCheck> {
+  const today = new Date();
+  const year = latestYear(input.text);
+  // Without AI we cannot judge validity (a 2021 founding decision is still valid), so only leave a hint.
+  const heuristic: EvidenceCheck = {
+    relevance: "unknown",
+    outdated: false,
+    issueYear: year,
+    notes: year !== null && today.getFullYear() - year >= 5 ? [`Năm gần nhất trong văn bản là ${year} – người duyệt kiểm tra văn bản còn hiệu lực không.`] : [],
+    usedFallback: true,
+    checkedFor: input.criteria.map((c) => c.code),
+  };
+  if (!input.text.trim()) return { ...heuristic, notes: ["Chưa trích xuất được nội dung tệp để kiểm tra."] };
+
+  const res = await aiComplete({
+    feature: "evidence_check",
+    userId: meta?.userId,
+    system: SYSTEM_QA,
+    maxTokens: 600,
+    prompt: `Kiểm tra nhanh một minh chứng vừa tải lên cho chương trình "${input.programName}". Hôm nay: ${today.toLocaleDateString("vi-VN")}.
+Mã/tên: ${input.code} — ${input.title}${input.issuedAt ? ` (ngày ban hành khai báo: ${input.issuedAt.toLocaleDateString("vi-VN")})` : ""}
+Tiêu chí được gán: ${input.criteria.length ? input.criteria.map((c) => `${c.code} ${c.title}`).join("; ") : "(chưa gán)"}
+Nội dung (trích):
+${truncate(input.text, 6000)}
+
+Trả lời DUY NHẤT một đối tượng JSON, không kèm giải thích:
+{"relevance":"high|partial|low","outdated":true|false,"issueYear":<năm ban hành hoặc null>,"notes":["tối đa 3 ghi chú ngắn cho người duyệt"]}
+Tiêu chí đánh giá: relevance=low nếu nội dung không liên quan tiêu chí được gán (VD thông báo nghỉ lễ gán cho tiêu chí cơ sở vật chất); outdated=true nếu văn bản đã quá cũ so với chu kỳ đánh giá, căn cứ vào văn bản pháp lý đã bị thay thế, hoặc ban hành trước khi chương trình/đơn vị tồn tại. Nếu chưa gán tiêu chí thì relevance theo mức hữu ích chung cho kiểm định.`,
+    fallback: () => JSON.stringify(heuristic),
+  });
+  if (res.usedFallback) return heuristic;
+  try {
+    const j = JSON.parse((res.text.match(/\{[\s\S]*\}/) ?? ["{}"])[0]) as Partial<EvidenceCheck> & { relevance?: string };
+    const rel = ["high", "partial", "low"].includes(String(j.relevance)) ? (j.relevance as EvidenceCheck["relevance"]) : "unknown";
+    return {
+      relevance: rel,
+      outdated: Boolean(j.outdated),
+      issueYear: typeof j.issueYear === "number" ? j.issueYear : year,
+      notes: Array.isArray(j.notes) ? j.notes.map(String).slice(0, 3) : [],
+      usedFallback: false,
+      model: res.model,
+      checkedFor: input.criteria.map((c) => c.code),
+    };
+  } catch {
+    return heuristic;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Program key facts: AI proposes facts from evidence, and cross-checks facts against evidence
+// ---------------------------------------------------------------------------
+export interface FactSuggestion {
+  groupName: string;
+  label: string;
+  value: string;
+  unit: string;
+  period: string;
+  sourceCode: string;
+}
+
+export async function suggestProgramFacts(programName: string, passages: string[], existing: string[], meta?: AiMeta): Promise<{ items: FactSuggestion[]; usedFallback: boolean }> {
+  if (!passages.length) return { items: [], usedFallback: true };
+  const res = await aiComplete({
+    feature: "fact_suggestion",
+    userId: meta?.userId,
+    system: SYSTEM_QA,
+    maxTokens: 3000,
+    prompt: `Từ các trích đoạn minh chứng của chương trình "${programName}", hãy liệt kê tối đa 30 SỐ LIỆU CHÍNH dùng nhiều trong báo cáo tự đánh giá (quy mô tuyển sinh, số người học, số giảng viên theo trình độ, tỷ lệ người học/giảng viên, tỷ lệ tốt nghiệp, thôi học, tỷ lệ việc làm, mức hài lòng, số công bố khoa học, số tín chỉ, cơ sở vật chất…).
+Chỉ lấy số liệu có trong trích đoạn, ghi đúng mã minh chứng nguồn. Bỏ qua các số liệu đã có: ${existing.length ? existing.join("; ") : "(chưa có)"}.
+Trả lời DUY NHẤT một mảng JSON: [{"groupName":"Tuyển sinh|Người học|Đội ngũ|Đầu ra|Hài lòng|Nghiên cứu|Chương trình|Cơ sở vật chất","label":"...","value":"...","unit":"...","period":"...","sourceCode":"MC-..."}]
+
+Trích đoạn:
+${truncate(passages.join("\n\n"), 30000)}`,
+    fallback: () => "[]",
+  });
+  try {
+    const arr = JSON.parse((res.text.match(/\[[\s\S]*\]/) ?? ["[]"])[0]) as Partial<FactSuggestion>[];
+    const items = arr
+      .filter((x) => x && x.label && x.value)
+      .slice(0, 30)
+      .map((x) => ({ groupName: String(x.groupName ?? ""), label: String(x.label), value: String(x.value), unit: String(x.unit ?? ""), period: String(x.period ?? ""), sourceCode: String(x.sourceCode ?? "") }));
+    return { items, usedFallback: res.usedFallback };
+  } catch {
+    return { items: [], usedFallback: true };
+  }
+}
+
+export async function checkProgramFacts(programName: string, facts: string[], passages: string[], meta?: AiMeta): Promise<AiResult> {
+  return aiComplete({
+    feature: "fact_check",
+    userId: meta?.userId,
+    system: SYSTEM_QA,
+    maxTokens: 2500,
+    prompt: `Đối chiếu bảng SỐ LIỆU CHÍNH của chương trình "${programName}" với các trích đoạn minh chứng bên dưới.
+Trình bày Markdown gồm 3 mục:
+### Mâu thuẫn cần xử lý
+(bảng: Số liệu | Giá trị trong bảng | Giá trị trong minh chứng [mã] | Gợi ý xử lý) – chỉ liệt kê khi minh chứng ghi khác bảng hoặc các minh chứng khác nhau.
+### Chưa tìm thấy căn cứ
+(số liệu trong bảng không thấy minh chứng nào nêu)
+### Khớp
+(liệt kê ngắn các số liệu đã khớp, kèm mã minh chứng)
+Không suy đoán ngoài trích đoạn.
+
+Bảng số liệu chính:
+${facts.join("\n")}
+
+Trích đoạn minh chứng:
+${truncate(passages.join("\n\n"), 30000)}`,
+    fallback: () => "Chưa bật AI nên không đối chiếu được. Hãy cấu hình khóa AI ở Quản trị › Cấu hình AI.",
   });
 }

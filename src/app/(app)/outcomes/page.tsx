@@ -42,6 +42,11 @@ export default async function OutcomesPage({ searchParams }: { searchParams: Pro
         description="Quản lý PLO/CLO và ma trận đóng góp học phần → PLO (mức Introduced / Reinforced / Mastered)"
         actions={
           <div className="flex items-center gap-2">
+            {canWrite && selected && !editing && (
+              <LinkButton href={`/programs/${selected.id}/import`} variant="outline">
+                Nhập từ Excel
+              </LinkButton>
+            )}
             {canWrite &&
               (editing ? (
                 <LinkButton href={baseHref}>Xong</LinkButton>
