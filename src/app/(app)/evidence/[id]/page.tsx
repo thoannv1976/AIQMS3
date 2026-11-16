@@ -21,6 +21,7 @@ import { logAudit } from "@/lib/audit";
 import { Input } from "@/components/ui";
 import { Role } from "@/generated/prisma/enums";
 import { Markdown } from "@/components/markdown";
+import { CommentThread } from "@/components/CommentThread";
 
 export default async function EvidenceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -300,6 +301,14 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
         </div>
 
         <div className="space-y-6">
+          {user.role !== Role.EXTERNAL_REVIEWER && (
+            <Card>
+              <CardContent className="pt-4">
+                <CommentThread entityType="evidence" entityId={evidence.id} currentUserId={user.id} compact />
+              </CardContent>
+            </Card>
+          )}
+
           {(evidence.aiCheckedAt || canWrite) && (
             <Card>
               <CardHeader className="flex items-center justify-between">

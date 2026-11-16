@@ -9,6 +9,8 @@ import { initials } from "@/lib/utils";
 import { getLocale, t } from "@/lib/i18n";
 import { NotificationBell } from "./NotificationBell";
 import { LanguageToggle } from "./LanguageToggle";
+import { CommandPalette } from "./CommandPalette";
+import { HelpButton } from "./HelpButton";
 
 export async function Topbar({ user }: { user: SessionUser }) {
   const [aiOn, notifications, locale] = await Promise.all([
@@ -23,6 +25,8 @@ export async function Topbar({ user }: { user: SessionUser }) {
       </div>
 
       <div className="flex items-center gap-3">
+        <CommandPalette />
+        <HelpButton />
         <span
           className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
             aiOn ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-800"

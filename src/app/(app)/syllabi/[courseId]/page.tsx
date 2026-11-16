@@ -10,6 +10,7 @@ import { ConfirmButton } from "@/components/form-controls";
 import { DescItem } from "@/components/widgets";
 import { syllabusStatus, contributionLevel, cloPloStrength } from "@/lib/labels";
 import { SyllabusReviewPanel } from "./SyllabusReviewPanel";
+import { SyllabusImport } from "./SyllabusImport";
 import { canAccessProgram } from "@/lib/access";
 import {
   createCloAction,
@@ -72,6 +73,7 @@ export default async function SyllabusDetailPage({
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           {!editing && <SyllabusReviewPanel courseId={course.id} />}
+          {editing && canSyllabus && <SyllabusImport courseId={course.id} />}
 
           <Card>
             <CardHeader>
@@ -103,6 +105,8 @@ export default async function SyllabusDetailPage({
                       ["teachingMethods", "Phương pháp giảng dạy", syl?.teachingMethods],
                       ["assessmentMethods", "Phương pháp đánh giá (kèm tỷ trọng)", syl?.assessmentMethods],
                       ["materials", "Tài liệu học tập", syl?.materials],
+                      ["schedule", "Kế hoạch giảng dạy (theo tuần)", syl?.schedule],
+                      ["requirements", "Yêu cầu đối với người học", syl?.requirements],
                     ] as const
                   ).map(([name, label, value]) => (
                     <div key={name}>
@@ -119,6 +123,8 @@ export default async function SyllabusDetailPage({
                   <DescItem label="Phương pháp giảng dạy">{syl.teachingMethods ?? "—"}</DescItem>
                   <DescItem label="Phương pháp đánh giá">{syl.assessmentMethods ?? "—"}</DescItem>
                   <DescItem label="Tài liệu học tập">{syl.materials ?? "—"}</DescItem>
+                  <DescItem label="Kế hoạch giảng dạy"><span className="whitespace-pre-line">{syl.schedule ?? "—"}</span></DescItem>
+                  <DescItem label="Yêu cầu đối với người học">{syl.requirements ?? "—"}</DescItem>
                 </dl>
               ) : (
                 <EmptyState

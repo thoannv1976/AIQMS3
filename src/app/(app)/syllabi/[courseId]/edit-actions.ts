@@ -101,6 +101,8 @@ export async function saveSyllabusAction(courseId: string, formData: FormData): 
     teachingMethods: str(formData, "teachingMethods") || null,
     assessmentMethods: str(formData, "assessmentMethods") || null,
     materials: str(formData, "materials") || null,
+    schedule: str(formData, "schedule") || null,
+    requirements: str(formData, "requirements") || null,
   };
   const status = str(formData, "status") as SyllabusStatus;
   const latest = await prisma.courseSyllabus.findFirst({ where: { courseId }, orderBy: { createdAt: "desc" } });

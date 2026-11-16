@@ -56,7 +56,12 @@ export default async function ProgramsPage() {
                       <Link href={`/programs/${p.id}`} className="font-medium text-slate-900 hover:text-brand-600">
                         {p.code}
                       </Link>
-                      <div className="text-xs text-slate-500">{p.nameVi}</div>
+                      {p.isSandbox && (
+                        <span className="ml-1.5" title={p.sandboxLabel ?? "Bản sao thực hành"}>
+                          <Badge color="purple">Thực hành</Badge>
+                        </span>
+                      )}
+                      <div className="text-xs text-slate-500">{p.sandboxLabel ? `${p.sandboxLabel} · ` : ""}{p.nameVi}</div>
                     </Td>
                     <Td>{p.faculty.name}</Td>
                     <Td>{degreeLabel[p.degreeLevel]}</Td>

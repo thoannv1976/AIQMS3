@@ -13,6 +13,7 @@ import { surveyAudience, surveyStatus } from "@/lib/labels";
 import { formatDate } from "@/lib/utils";
 import { QuestionType, SurveyStatus } from "@/generated/prisma/enums";
 import { AnalyzePanel } from "./AnalyzePanel";
+import { ResponseImport } from "./ResponseImport";
 import { addQuestionAction, deleteQuestionAction, setSurveyStatusAction, updateSurveyScheduleAction } from "../manage-actions";
 
 const TYPE_LABEL: Record<QuestionType, string> = {
@@ -155,6 +156,8 @@ export default async function SurveyDetailPage({ params }: { params: Promise<{ i
             </CardContent>
           </Card>
         )}
+
+        {canWrite && survey.questions.length > 0 && <ResponseImport surveyId={survey.id} />}
 
         <AnalyzePanel surveyId={survey.id} programId={survey.programId} criterionId={survey.criterionId} canWrite={canWrite} />
 

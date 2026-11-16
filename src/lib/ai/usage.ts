@@ -60,6 +60,10 @@ export const FEATURE_LABELS: Record<string, string> = {
   ocr: "OCR bản scan / ảnh",
   interview_questions: "Gợi ý câu hỏi phỏng vấn",
   leadership_brief: "Nhận định cho lãnh đạo",
+  evidence_check: "AI kiểm tra minh chứng",
+  fact_suggestion: "Đề xuất số liệu chính",
+  fact_check: "Đối chiếu số liệu chính",
+  syllabus_import: "Nhập đề cương từ Word",
   bulk_classify: "AI phân loại hàng loạt",
   other: "Khác",
 };

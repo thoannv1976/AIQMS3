@@ -192,6 +192,7 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ i
               reviewerName: s.reviewer?.fullName ?? null,
             }}
             users={approverUsers.map((u) => ({ id: u.id, fullName: u.fullName }))}
+            currentUserId={user.role === "EXTERNAL_REVIEWER" ? undefined : user.id}
           />
         ))}
       </div>

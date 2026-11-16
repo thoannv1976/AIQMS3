@@ -239,6 +239,7 @@ model User {
   evidenceVersions   EvidenceFileVersion[]
   sectionRevisions   ReportSectionRevision[]
   reportVersions     ReportVersion[]
+  comments           Comment[]               @relation("CommentAuthor")
 }
 
 model UserProgramRole {
@@ -265,6 +266,10 @@ model Program {
   totalCredits Int?
   objectives   String? // mục tiêu đào tạo
   description  String?
+  // Chế độ lớp học: bản sao thực hành, tách khỏi dữ liệu thật (không tính vào bảng điều hành, đối sánh).
+  isSandbox         Boolean  @default(false)
+  sandboxTemplateId String?
+  sandboxLabel      String? // VD "Lớp K22 – Nhóm 1"
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
@@ -282,6 +287,25 @@ model Program {
   documents          Document[]
   chatSessions       AiChatSession[]
   facts              ProgramFact[]
+  comments           Comment[]
+}
+
+// Bình luận / trao đổi trên mục SAR, minh chứng, kế hoạch cải tiến (có nhắc tên @).
+model Comment {
+  id         String   @id @default(cuid())
+  programId  String
+  program    Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  entityType String // report_section | evidence | improvement
+  entityId   String
+  authorId   String?
+  author     User?    @relation("CommentAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  body       String
+  mentions   String[] // user ids
+  resolved   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([programId])
 }
 
 // Số liệu chính của chương trình (tỷ lệ việc làm, số GV…): nhập một lần, AI dùng thống nhất khi soạn SAR.
