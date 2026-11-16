@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Activity,
   LayoutDashboard,
   GraduationCap,
   Target,
@@ -53,6 +54,7 @@ const ICONS: Record<string, LucideIcon> = {
   approval: CheckCheck,
   mywork: ListTodo,
   org: Building2,
+  system: Activity,
 };
 
 export function Sidebar({ groups }: { groups: NavGroup[] }) {

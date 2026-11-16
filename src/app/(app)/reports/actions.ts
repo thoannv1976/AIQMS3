@@ -13,6 +13,8 @@ import { createNotification } from "@/lib/notify";
 import { checkCitations, extractCitationCodes, uncitedClaims, type CitationCheck } from "@/lib/sar/citations";
 import { suggestInterviewQuestions } from "@/lib/ai/features";
 import { validityState } from "@/lib/access";
+import { evidenceContextBlocks, programFactLines, type EvidenceLite } from "@/lib/sar/excerpts";
+import { splitSarDraft } from "@/lib/sar/draft";
 import { AiAnalysisType, EvidenceStatus, ReportSectionStatus, ReportStatus } from "@/generated/prisma/enums";
 
 const APPROVED_EV: EvidenceStatus[] = [EvidenceStatus.APPROVED, EvidenceStatus.USED_IN_REPORT];
@@ -88,7 +90,7 @@ async function evidenceForSection(sectionId: string) {
   });
   if (!section) return null;
 
-  const evidenceSummaries: string[] = [];
+  let evidenceSummaries: string[] = [];
   let linkedEvidenceCount = 0;
   const excluded: string[] = [];
   const critIds = await sectionCriterionIds(section);
@@ -96,22 +98,25 @@ async function evidenceForSection(sectionId: string) {
     const links = await prisma.evidenceCriterionLink.findMany({
       where: { criterionId: { in: critIds }, evidence: { programId: section.report.cycle.programId } },
       distinct: ["evidenceId"],
-      include: { evidence: { include: { document: true } } },
+      include: { evidence: { select: { id: true, code: true, title: true, status: true, validUntil: true, providerUnit: true, issuedAt: true, description: true } } },
     });
     linkedEvidenceCount = links.length;
     // SAR drafts may only rest on approved, still-valid evidence ("minh chứng trước – nhận định sau").
+    const usable: EvidenceLite[] = [];
     for (const l of links) {
       const e = l.evidence;
       const approved = e.status === EvidenceStatus.APPROVED || e.status === EvidenceStatus.USED_IN_REPORT;
       const expired = validityState(e.validUntil) === "expired";
-      if (approved && !expired) {
-        evidenceSummaries.push(`${e.code} — ${e.title}: ${e.document?.summary || e.description || (e.document?.extractedText ?? "").slice(0, 600)}`);
-      } else {
-        excluded.push(`${e.code} (${expired ? "hết hiệu lực" : "chưa duyệt"})`);
-      }
+      if (approved && !expired) usable.push(e);
+      else excluded.push(`${e.code} (${expired ? "hết hiệu lực" : "chưa duyệt"})`);
     }
+    usable.sort((a, b) => a.code.localeCompare(b.code, "vi", { numeric: true }));
+    // Full-text passages (ranked for the criterion, figures first) instead of one-line summaries.
+    const query = [section.standard?.title, section.criterion?.title, section.title].filter(Boolean).join(" ");
+    evidenceSummaries = await evidenceContextBlocks(usable, query);
   }
-  return { section, evidenceSummaries, linkedEvidenceCount, excluded, critIds };
+  const facts = await programFactLines(section.report.cycle.programId);
+  return { section, evidenceSummaries, linkedEvidenceCount, excluded, critIds, facts };
 }
 
 export async function draftSectionAction(sectionId: string): Promise<{ text: string; usedFallback: boolean; excluded?: string[] }> {
@@ -124,6 +129,7 @@ export async function draftSectionAction(sectionId: string): Promise<{ text: str
     criterionCode: ctx.section.standard ? `Tiêu chuẩn ${ctx.section.standard.code}` : ctx.section.criterion?.code,
     criterionTitle: ctx.section.standard?.title ?? ctx.section.criterion?.title ?? ctx.section.title,
     evidenceSummaries: ctx.evidenceSummaries,
+    facts: ctx.facts,
   }, { userId: user.id });
 
   await prisma.aiAnalysisResult.create({
@@ -444,4 +450,81 @@ export async function interviewQuestionsAction(reportId: string): Promise<{ text
   await logAudit({ userId: user.id, action: "AI_INTERVIEW_QUESTIONS", entityType: "SelfAssessmentReport", entityId: reportId });
   revalidatePath(`/reports/${reportId}`);
   return { text: res.text, usedFallback: res.usedFallback };
+}
+
+// ============================ Bulk tools (assignment, AI drafting of the whole report) ============================
+
+/** Assign writer/reviewer to every section of each standard in one go. */
+export async function bulkAssignSectionsAction(
+  reportId: string,
+  rows: Array<{ standardId: string; assignedToId: string | null; reviewerId: string | null }>,
+  overwrite: boolean,
+): Promise<{ ok: boolean; updated: number; error?: string }> {
+  const user = await requireUser();
+  if (!can(user.role, "report:write")) return { ok: false, updated: 0, error: "Không có quyền." };
+  const sections = await prisma.reportSection.findMany({
+    where: { reportId },
+    select: { id: true, standardId: true, criterion: { select: { standardId: true } }, assignedToId: true, reviewerId: true },
+  });
+  const tally = new Map<string, { writer: number; reviewer: number }>();
+  let updated = 0;
+  for (const row of rows) {
+    if (!row.assignedToId && !row.reviewerId) continue;
+    for (const s of sections.filter((x) => (x.standardId ?? x.criterion?.standardId) === row.standardId)) {
+      const data: { assignedToId?: string; reviewerId?: string } = {};
+      if (row.assignedToId && (overwrite || !s.assignedToId) && s.assignedToId !== row.assignedToId) data.assignedToId = row.assignedToId;
+      if (row.reviewerId && (overwrite || !s.reviewerId) && s.reviewerId !== row.reviewerId) data.reviewerId = row.reviewerId;
+      if (!data.assignedToId && !data.reviewerId) continue;
+      await prisma.reportSection.update({ where: { id: s.id }, data });
+      updated++;
+      for (const [uid, kind] of [[data.assignedToId, "writer"], [data.reviewerId, "reviewer"]] as const) {
+        if (!uid) continue;
+        const t = tally.get(uid) ?? { writer: 0, reviewer: 0 };
+        t[kind]++;
+        tally.set(uid, t);
+      }
+    }
+  }
+  const link = `/reports/${reportId}`;
+  for (const [uid, t] of tally) {
+    const parts = [t.writer ? `viết ${t.writer} mục` : "", t.reviewer ? `phản biện ${t.reviewer} mục` : ""].filter(Boolean).join(", ");
+    await createNotification({ userId: uid, title: "Bạn được phân công trong báo cáo tự đánh giá", message: parts, link });
+  }
+  await logAudit({ userId: user.id, action: "BULK_ASSIGN", entityType: "SelfAssessmentReport", entityId: reportId, detail: { rows, overwrite, updated } });
+  revalidatePath(link);
+  return { ok: true, updated };
+}
+
+export type BatchDraftOutcome =
+  | { status: "done"; citations: number; needData: number; excluded: number }
+  | { status: "skipped"; reason: string }
+  | { status: "error"; reason: string };
+
+/** Draft one section with AI and save it straight into the four fields (used by the whole-report runner). */
+export async function draftAndSaveSectionAction(
+  sectionId: string,
+  opts: { overwrite: boolean; status: ReportSectionStatus },
+): Promise<BatchDraftOutcome> {
+  const user = await requireUser();
+  if (!can(user.role, "report:write") || !can(user.role, "ai:use")) return { status: "error", reason: "Không có quyền" };
+  try {
+    const existing = await prisma.reportSection.findUnique({ where: { id: sectionId }, select: { content: true, strengths: true, weaknesses: true, improvementPlan: true } });
+    if (!existing) return { status: "error", reason: "Không tìm thấy mục" };
+    const hasText = [existing.content, existing.strengths, existing.weaknesses, existing.improvementPlan].some((x) => x && x.trim());
+    if (hasText && !opts.overwrite) return { status: "skipped", reason: "Đã có nội dung" };
+    const draft = await draftSectionAction(sectionId);
+    if (draft.usedFallback) return { status: "error", reason: "AI chưa sẵn sàng (đang dùng bản dự phòng)" };
+    const f = splitSarDraft(draft.text);
+    const res = await saveSectionAction(sectionId, { ...f, status: opts.status });
+    if (!res.ok) return { status: "error", reason: res.error ?? "Không lưu được" };
+    const all = [f.content, f.strengths, f.weaknesses, f.improvementPlan].join("\n");
+    return {
+      status: "done",
+      citations: extractCitationCodes(all).length,
+      needData: (all.match(/cần bổ sung số liệu/gi) ?? []).length,
+      excluded: draft.excluded?.length ?? 0,
+    };
+  } catch (e) {
+    return { status: "error", reason: e instanceof Error ? e.message.slice(0, 160) : "Lỗi" };
+  }
 }

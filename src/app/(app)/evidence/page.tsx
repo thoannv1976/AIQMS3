@@ -15,6 +15,9 @@ import { formatDate } from "@/lib/utils";
 import type { Prisma } from "@/generated/prisma/client";
 import { EvidenceStatus, Role } from "@/generated/prisma/enums";
 import { BulkClassifyButton } from "./BulkClassifyButton";
+import { EvidenceBulkBar, RowBox, SelectAllBox } from "./EvidenceBulkBar";
+import { checkFlag } from "@/lib/evidence/check";
+import { FolderDown, ShieldAlert } from "lucide-react";
 
 type Sp = { program?: string; q?: string; mode?: string; status?: string; validity?: string; linked?: string };
 
@@ -22,7 +25,10 @@ export default async function EvidencePage({ searchParams }: { searchParams: Pro
   const user = await requireUser();
   const sp = await searchParams;
   const { programs, selected } = await resolveProgram(sp.program);
-  const canWrite = selected ? canInProgram(user.role, await programRolesOf(user.id, selected.id), "evidence:write") : false;
+  const myRoles = selected ? await programRolesOf(user.id, selected.id) : [];
+  const canWrite = selected ? canInProgram(user.role, myRoles, "evidence:write") : false;
+  const canApprove = selected ? canInProgram(user.role, myRoles, "evidence:approve") : false;
+  const bulkOn = Boolean(selected) && (canWrite || canApprove);
   const q = (sp.q ?? "").trim();
   const semantic = sp.mode === "semantic" && q.length > 0;
 
@@ -95,6 +101,15 @@ export default async function EvidencePage({ searchParams }: { searchParams: Pro
   const dupMap = selected && evidence.length > 1 ? await findProgramDuplicates(selected.id) : new Map();
   const unlinked = selected && canWrite ? await prisma.evidence.count({ where: { programId: selected.id, criterionLinks: { none: {} }, locked: false } }) : 0;
   const filtered = Boolean(q || sp.status || sp.validity || sp.linked);
+  const criteriaForBulk = bulkOn && selected
+    ? (
+        await prisma.criterion.findMany({
+          where: { standard: { set: { cycles: { some: { programId: selected.id } } } } },
+          orderBy: [{ standard: { order: "asc" } }, { order: "asc" }],
+          select: { id: true, code: true, title: true },
+        })
+      )
+    : [];
 
   return (
     <div>
@@ -108,6 +123,15 @@ export default async function EvidencePage({ searchParams }: { searchParams: Pro
               <LinkButton href={`/evidence/matrix?program=${selected.id}`} variant="outline">
                 <Grid3x3 className="h-4 w-4" /> Ma trận
               </LinkButton>
+            )}
+            {selected && evidence.length > 0 && (
+              <a
+                href={`/evidence/dossier?program=${selected.id}`}
+                title="Tải trọn hồ sơ minh chứng đã duyệt theo cây Tiêu chuẩn/Tiêu chí (zip) kèm mục lục Excel"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                <FolderDown className="h-4 w-4" /> Xuất hồ sơ (zip)
+              </a>
             )}
             {selected && evidence.length > 0 && (
               <a
@@ -189,10 +213,16 @@ export default async function EvidencePage({ searchParams }: { searchParams: Pro
         />
       ) : (
         <Card>
+          {bulkOn && selected && (
+            <div className="px-3 pt-3">
+              <EvidenceBulkBar programId={selected.id} canApprove={canApprove} canWrite={canWrite} criteria={criteriaForBulk} />
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="border-b border-slate-100 bg-slate-50">
                 <tr>
+                  {bulkOn && <Th className="w-8"><SelectAllBox /></Th>}
                   <Th>Mã</Th>
                   <Th>Tên minh chứng</Th>
                   <Th>Đơn vị</Th>
@@ -207,8 +237,10 @@ export default async function EvidencePage({ searchParams }: { searchParams: Pro
                 {evidence.map((e) => {
                   const v = validityState(e.validUntil);
                   const dups = dupMap.get(e.id) ?? [];
+                  const flag = checkFlag(e.aiCheck);
                   return (
                     <tr key={e.id} className="hover:bg-slate-50">
+                      {bulkOn && <Td className="w-8"><RowBox id={e.id} /></Td>}
                       <Td className="whitespace-nowrap font-medium">
                         <Link href={`/evidence/${e.id}`} className="text-slate-900 hover:text-brand-600">
                           {e.code}
@@ -229,6 +261,14 @@ export default async function EvidencePage({ searchParams }: { searchParams: Pro
                             </span>
                           )}
                         </div>
+                        {flag && (
+                          <div className="mt-1" title={flag.notes.join(" · ")}>
+                            <Badge color={flag.color}>
+                              <ShieldAlert className="mr-0.5 inline h-3 w-3" />
+                              {flag.label}
+                            </Badge>
+                          </div>
+                        )}
                         {snippets.get(e.id) && <div className="mt-1 text-xs text-slate-500">{snippets.get(e.id)}</div>}
                       </Td>
                       <Td className="text-slate-500">{e.providerUnit ?? "—"}</Td>

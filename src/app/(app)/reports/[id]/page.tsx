@@ -9,6 +9,7 @@ import { reportStatus } from "@/lib/labels";
 import { ReportSectionStatus, ReportStatus } from "@/generated/prisma/enums";
 import { pct } from "@/lib/utils";
 import { SectionEditor } from "./SectionEditor";
+import { ReportBulkTools } from "./ReportBulkTools";
 import { setReportStatusAction } from "../actions";
 import { ApprovalPanel } from "../../approvals/ApprovalPanel";
 import { InterviewPanel } from "./InterviewPanel";
@@ -56,13 +57,14 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ i
   const canWrite = can(user.role, "report:write");
   const canApprove = can(user.role, "report:approve");
 
-  const [approvalSteps, approverUsers] = await Promise.all([
+  const [approvalSteps, approverUsers, standards] = await Promise.all([
     prisma.approvalFlow.findMany({
       where: { entityType: "report", entityId: id },
       orderBy: { step: "asc" },
       include: { approver: { select: { fullName: true } } },
     }),
     prisma.user.findMany({ where: { isActive: true }, orderBy: { fullName: "asc" }, select: { id: true, fullName: true, role: true } }),
+    prisma.standard.findMany({ where: { setId: report.cycle.standardSetId }, orderBy: { order: "asc" }, select: { id: true, code: true, title: true } }),
   ]);
 
   return (
@@ -127,6 +129,30 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ i
           </form>
         )}
       </div>
+
+      {canWrite && (
+        <ReportBulkTools
+          reportId={report.id}
+          canUseAi={can(user.role, "ai:use")}
+          users={approverUsers.filter((u) => u.role !== "EXTERNAL_REVIEWER").map((u) => ({ id: u.id, fullName: u.fullName }))}
+          groups={standards
+            .map((st) => ({
+              standardId: st.id,
+              code: st.code,
+              title: st.title,
+              sections: report.sections
+                .filter((s) => (s.standardId ?? s.criterion?.standardId) === st.id)
+                .map((s) => ({
+                  id: s.id,
+                  title: s.title,
+                  hasText: [s.content, s.strengths, s.weaknesses, s.improvementPlan].some((x) => x && x.trim()),
+                  assignedToId: s.assignedToId,
+                  reviewerId: s.reviewerId,
+                })),
+            }))
+            .filter((g) => g.sections.length > 0)}
+        />
+      )}
 
       <InterviewPanel
         reportId={report.id}

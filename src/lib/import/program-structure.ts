@@ -1,0 +1,261 @@
+// Import a program's structure from Excel: courses, PLOs, course↔PLO matrix (I/R/M) and CLOs.
+// Accepts the system template or similar sheets (header row is detected; column names are matched loosely).
+import { prisma } from "@/lib/db";
+import { ContributionLevel, CloPloStrength } from "@/generated/prisma/enums";
+import { readTables, findCol, norm, str, int, type SheetTable } from "./sheet";
+
+export interface CourseRow { code: string; nameVi: string; nameEn: string | null; credits: number; semester: number | null; type: string | null }
+export interface PloRow { code: string; description: string; category: string | null }
+export interface MatrixRow { courseCode: string; cells: Array<{ ploCode: string; level: ContributionLevel | null }> }
+export interface CloRow { courseCode: string; code: string; description: string; plos: string[]; strength: CloPloStrength }
+export interface ImportIssue { where: string; message: string; level: "error" | "warning" }
+
+export interface StructurePlan {
+  courses: CourseRow[];
+  plos: PloRow[];
+  matrix: MatrixRow[];
+  clos: CloRow[];
+  issues: ImportIssue[];
+  sheets: Array<{ where: string; kind: string; rows: number }>;
+}
+
+export interface StructurePreview {
+  plan: StructurePlan;
+  counts: Record<"courses" | "plos" | "matrixCells" | "clos", { create: number; update: number }>;
+}
+
+const KEY_HEADERS = new Set(["ma", "ma hp", "ma hoc phan", "ma clo", "ma pi", "ma plo", "code", "course code", "plo code", "clo code"]);
+const isHeader = (cells: string[]) => cells.filter(Boolean).length >= 2 && cells.some((c) => KEY_HEADERS.has(c));
+
+const COURSE_CODE = ["Mã HP", "Mã học phần", "Course code", "courseCode"];
+const PLO_RE = /^plo\s*\d+/;
+
+function category(v: string): string | null {
+  const n = norm(v);
+  if (!n) return null;
+  if (/knowledge|kien thuc/.test(n)) return "knowledge";
+  if (/skill|ky nang/.test(n)) return "skill";
+  if (/autonomy|tu chu|trach nhiem|thai do|attitude/.test(n)) return "autonomy";
+  return null;
+}
+function courseType(v: string): string | null {
+  const n = norm(v);
+  if (!n) return null;
+  if (/elective|tu chon/.test(n)) return "elective";
+  if (/general|dai cuong/.test(n)) return "general";
+  if (/core|bat buoc|compulsory/.test(n)) return "core";
+  return null;
+}
+export function parseLevel(v: unknown): ContributionLevel | null | "invalid" {
+  const raw = String(v ?? "").trim();
+  if (!raw) return null;
+  if (raw === "✓" || raw === "✔") return ContributionLevel.INTRODUCED;
+  const n = norm(raw);
+  const tokens = new Set(n.split(" "));
+  // "I, R" or "I/R/M" → the highest level present.
+  if (tokens.has("m") || tokens.has("3") || tokens.has("mastered") || n.includes("thanh thao")) return ContributionLevel.MASTERED;
+  if (tokens.has("r") || tokens.has("2") || tokens.has("reinforced") || n.includes("cung co")) return ContributionLevel.REINFORCED;
+  if (tokens.has("i") || tokens.has("1") || tokens.has("x") || tokens.has("introduced") || n.includes("gioi thieu")) return ContributionLevel.INTRODUCED;
+  return "invalid";
+}
+function strength(v: string): CloPloStrength {
+  const n = norm(v);
+  if (/high|cao|manh|\bm\b/.test(n)) return CloPloStrength.HIGH;
+  if (/low|thap|yeu/.test(n)) return CloPloStrength.LOW;
+  return CloPloStrength.MEDIUM;
+}
+const ploCode = (s: string) => {
+  const m = /plo\s*0*(\d+)/i.exec(s);
+  return m ? `PLO${m[1]}` : s.trim().toUpperCase();
+};
+
+function classify(t: SheetTable): "matrix" | "clo" | "course" | "plo" | "pi" | null {
+  const H = t.headers.map(norm);
+  const hasCourse = findCol(t.headers, COURSE_CODE) >= 0;
+  if (hasCourse && H.some((h) => PLO_RE.test(h))) return "matrix";
+  if (H.some((h) => h === "ma clo" || h === "clo code" || h === "clo")) return "clo";
+  if (hasCourse) return "course";
+  if (H.some((h) => h === "ma pi" || h === "pi")) return "pi";
+  if (findCol(t.headers, ["Mã", "Mã PLO", "PLO", "Code"], { exact: true }) >= 0 && findCol(t.headers, ["Mô tả", "Mô tả chuẩn đầu ra", "Description", "Nội dung"]) >= 0) return "plo";
+  return null;
+}
+
+export async function parseStructureFiles(files: Array<{ name: string; buffer: Buffer }>): Promise<StructurePlan> {
+  const plan: StructurePlan = { courses: [], plos: [], matrix: [], clos: [], issues: [], sheets: [] };
+  for (const f of files) {
+    let tables: SheetTable[];
+    try {
+      tables = await readTables(f, isHeader);
+    } catch {
+      plan.issues.push({ where: f.name, message: "Không đọc được tệp (hỏng hoặc không phải Excel/CSV).", level: "error" });
+      continue;
+    }
+    for (const t of tables) {
+      const kind = classify(t);
+      const where = `${t.file} › ${t.sheet}`;
+      if (!kind) continue;
+      plan.sheets.push({ where, kind, rows: t.rows.length });
+      if (kind === "pi") {
+        plan.issues.push({ where, message: "Sheet chỉ báo PI chỉ để tham khảo – hệ thống chưa lưu PI nên bỏ qua.", level: "warning" });
+        continue;
+      }
+      const at = (r: number) => `${where} › dòng ${r}`;
+      if (kind === "course") {
+        const cCode = findCol(t.headers, COURSE_CODE);
+        const cName = findCol(t.headers, ["Tên học phần", "Tên HP", "Tên tiếng Việt", "Course name", "nameVi", "Tên"]);
+        const cEn = findCol(t.headers, ["Tên tiếng Anh", "English name", "nameEn"]);
+        const cCr = findCol(t.headers, ["Số TC", "Số tín chỉ", "Tín chỉ", "TC", "Credits"]);
+        const cSem = findCol(t.headers, ["Học kỳ", "HK", "Semester"]);
+        const cType = findCol(t.headers, ["Loại (type)", "Loại", "Type", "Loại học phần"]);
+        for (const r of t.rows) {
+          const code = str(r.cells[cCode]).toUpperCase();
+          const nameVi = cName >= 0 ? str(r.cells[cName]) : "";
+          if (!code && !nameVi) continue;
+          if (!code || !nameVi) { plan.issues.push({ where: at(r.rowNumber), message: "Thiếu mã hoặc tên học phần.", level: "error" }); continue; }
+          const credits = cCr >= 0 ? int(r.cells[cCr]) : null;
+          if (credits != null && (credits < 0 || credits > 30)) plan.issues.push({ where: at(r.rowNumber), message: `Số tín chỉ ${credits} bất thường.`, level: "warning" });
+          plan.courses.push({ code, nameVi, nameEn: cEn >= 0 ? str(r.cells[cEn]) || null : null, credits: credits ?? 3, semester: cSem >= 0 ? int(r.cells[cSem]) : null, type: cType >= 0 ? courseType(str(r.cells[cType])) : null });
+        }
+      } else if (kind === "plo") {
+        const cCode = findCol(t.headers, ["Mã PLO", "Mã", "PLO", "Code"], { exact: true });
+        const cDesc = findCol(t.headers, ["Mô tả chuẩn đầu ra", "Mô tả", "Description", "Nội dung"]);
+        const cCat = findCol(t.headers, ["Nhóm (category)", "Category", "Nhóm", "Loại"]);
+        for (const r of t.rows) {
+          const code = ploCode(str(r.cells[cCode]));
+          const description = str(r.cells[cDesc]);
+          if (!code && !description) continue;
+          if (!code || !description) { plan.issues.push({ where: at(r.rowNumber), message: "Thiếu mã hoặc mô tả PLO.", level: "error" }); continue; }
+          plan.plos.push({ code, description, category: cCat >= 0 ? category(str(r.cells[cCat])) : null });
+        }
+      } else if (kind === "matrix") {
+        const cCode = findCol(t.headers, COURSE_CODE);
+        const ploCols = t.headers.map((h, i) => ({ h, i })).filter((x) => PLO_RE.test(norm(x.h)));
+        for (const r of t.rows) {
+          const courseCode = str(r.cells[cCode]).toUpperCase();
+          if (!courseCode) continue;
+          const cells: MatrixRow["cells"] = [];
+          for (const pc of ploCols) {
+            const lv = parseLevel(r.cells[pc.i]);
+            if (lv === "invalid") { plan.issues.push({ where: at(r.rowNumber), message: `Ô ${pc.h} = "${r.cells[pc.i]}" không phải I/R/M – bỏ qua.`, level: "warning" }); continue; }
+            cells.push({ ploCode: ploCode(pc.h), level: lv });
+          }
+          plan.matrix.push({ courseCode, cells });
+        }
+      } else if (kind === "clo") {
+        const cCourse = findCol(t.headers, COURSE_CODE);
+        const cCode = findCol(t.headers, ["Mã CLO", "CLO", "CLO code"]);
+        const cDesc = findCol(t.headers, ["Mô tả", "Mô tả CLO", "Description", "Nội dung"]);
+        const cPlo = findCol(t.headers, ["PLO liên kết", "PLO", "Liên kết PLO", "PLOs"]);
+        const cStr = findCol(t.headers, ["Mức đóng góp", "Mức", "Strength", "Mức độ"]);
+        for (const r of t.rows) {
+          const courseCode = str(r.cells[cCourse]).toUpperCase();
+          const code = str(r.cells[cCode]).toUpperCase().replace(/\s+/g, "");
+          const description = str(r.cells[cDesc]);
+          if (!courseCode && !code) continue;
+          if (!courseCode || !code || !description) { plan.issues.push({ where: at(r.rowNumber), message: "Thiếu mã học phần, mã CLO hoặc mô tả.", level: "error" }); continue; }
+          const plos = cPlo >= 0 ? (str(r.cells[cPlo]).match(/plo\s*\d+/gi) ?? []).map(ploCode) : [];
+          plan.clos.push({ courseCode, code, description, plos, strength: cStr >= 0 ? strength(str(r.cells[cStr])) : CloPloStrength.MEDIUM });
+        }
+      }
+    }
+  }
+  // Duplicates inside the upload: last one wins, but tell the user.
+  const dedupe = <T,>(arr: T[], key: (x: T) => string, label: string) => {
+    const seen = new Map<string, T>();
+    for (const x of arr) {
+      if (seen.has(key(x))) plan.issues.push({ where: label, message: `Trùng ${key(x)} – dùng dòng sau cùng.`, level: "warning" });
+      seen.set(key(x), x);
+    }
+    return [...seen.values()];
+  };
+  plan.courses = dedupe(plan.courses, (c) => c.code, "Học phần");
+  plan.plos = dedupe(plan.plos, (p) => p.code, "PLO");
+  plan.matrix = dedupe(plan.matrix, (m) => m.courseCode, "Ma trận");
+  plan.clos = dedupe(plan.clos, (c) => `${c.courseCode}/${c.code}`, "CLO");
+  if (!plan.sheets.length) plan.issues.push({ where: "Tệp tải lên", message: "Không tìm thấy sheet học phần, PLO, ma trận hoặc CLO. Hãy dùng tệp mẫu.", level: "error" });
+  return plan;
+}
+
+/** Compare the plan with the database: counts, and references that cannot be resolved. */
+export async function previewStructure(programId: string, plan: StructurePlan): Promise<StructurePreview> {
+  const [courses, plos] = await Promise.all([
+    prisma.course.findMany({ where: { programId }, select: { id: true, code: true, clos: { select: { code: true } } } }),
+    prisma.plo.findMany({ where: { programId }, select: { code: true } }),
+  ]);
+  const courseCodes = new Set([...courses.map((c) => c.code), ...plan.courses.map((c) => c.code)]);
+  const ploCodes = new Set([...plos.map((p) => p.code), ...plan.plos.map((p) => p.code)]);
+  const existingCourse = new Set(courses.map((c) => c.code));
+  const existingPlo = new Set(plos.map((p) => p.code));
+  const existingClo = new Set(courses.flatMap((c) => c.clos.map((k) => `${c.code}/${k.code}`)));
+  let cells = 0;
+  for (const m of plan.matrix) {
+    if (!courseCodes.has(m.courseCode)) plan.issues.push({ where: "Ma trận", message: `Học phần ${m.courseCode} chưa có – dòng ma trận sẽ bị bỏ qua.`, level: "error" });
+    for (const c of m.cells) if (!ploCodes.has(c.ploCode)) plan.issues.push({ where: "Ma trận", message: `${c.ploCode} chưa có trong chương trình – cột sẽ bị bỏ qua.`, level: "error" });
+    cells += m.cells.filter((c) => c.level).length;
+  }
+  for (const c of plan.clos) {
+    if (!courseCodes.has(c.courseCode)) plan.issues.push({ where: "CLO", message: `Học phần ${c.courseCode} chưa có – CLO ${c.code} sẽ bị bỏ qua.`, level: "error" });
+    for (const p of c.plos) if (!ploCodes.has(p)) plan.issues.push({ where: "CLO", message: `${c.courseCode}/${c.code}: ${p} chưa có.`, level: "warning" });
+  }
+  plan.issues = plan.issues.filter((x, i, a) => a.findIndex((y) => y.where === x.where && y.message === x.message) === i);
+  return {
+    plan,
+    counts: {
+      courses: { create: plan.courses.filter((c) => !existingCourse.has(c.code)).length, update: plan.courses.filter((c) => existingCourse.has(c.code)).length },
+      plos: { create: plan.plos.filter((p) => !existingPlo.has(p.code)).length, update: plan.plos.filter((p) => existingPlo.has(p.code)).length },
+      matrixCells: { create: cells, update: 0 },
+      clos: { create: plan.clos.filter((c) => !existingClo.has(`${c.courseCode}/${c.code}`)).length, update: plan.clos.filter((c) => existingClo.has(`${c.courseCode}/${c.code}`)).length },
+    },
+  };
+}
+
+/** Write the plan. Matrix rows replace that course's whole row (blank cells remove old links). */
+export async function applyStructure(programId: string, plan: StructurePlan) {
+  return prisma.$transaction(
+    async (tx) => {
+      for (const c of plan.courses) {
+        await tx.course.upsert({
+          where: { programId_code: { programId, code: c.code } },
+          update: { nameVi: c.nameVi, nameEn: c.nameEn ?? undefined, credits: c.credits, semester: c.semester, type: c.type ?? undefined },
+          create: { programId, code: c.code, nameVi: c.nameVi, nameEn: c.nameEn, credits: c.credits, semester: c.semester, type: c.type },
+        });
+      }
+      for (const p of plan.plos) {
+        await tx.plo.upsert({
+          where: { programId_code: { programId, code: p.code } },
+          update: { description: p.description, category: p.category ?? undefined },
+          create: { programId, code: p.code, description: p.description, category: p.category },
+        });
+      }
+      const courseId = new Map((await tx.course.findMany({ where: { programId }, select: { id: true, code: true } })).map((c) => [c.code, c.id]));
+      const ploId = new Map((await tx.plo.findMany({ where: { programId }, select: { id: true, code: true } })).map((p) => [p.code, p.id]));
+      let cells = 0;
+      for (const m of plan.matrix) {
+        const cid = courseId.get(m.courseCode);
+        if (!cid) continue;
+        for (const cell of m.cells) {
+          const pid = ploId.get(cell.ploCode);
+          if (!pid) continue;
+          if (cell.level) {
+            await tx.curriculumMap.upsert({ where: { courseId_ploId: { courseId: cid, ploId: pid } }, update: { level: cell.level }, create: { programId, courseId: cid, ploId: pid, level: cell.level } });
+            cells++;
+          } else await tx.curriculumMap.deleteMany({ where: { courseId: cid, ploId: pid } });
+        }
+      }
+      let clos = 0;
+      for (const c of plan.clos) {
+        const cid = courseId.get(c.courseCode);
+        if (!cid) continue;
+        const clo = await tx.clo.upsert({ where: { courseId_code: { courseId: cid, code: c.code } }, update: { description: c.description }, create: { courseId: cid, code: c.code, description: c.description } });
+        await tx.cloPloLink.deleteMany({ where: { cloId: clo.id } });
+        for (const p of c.plos) {
+          const pid = ploId.get(p);
+          if (pid) await tx.cloPloLink.create({ data: { cloId: clo.id, ploId: pid, strength: c.strength } });
+        }
+        clos++;
+      }
+      return { courses: plan.courses.length, plos: plan.plos.length, matrixCells: cells, clos };
+    },
+    { timeout: 120_000, maxWait: 20_000 },
+  );
+}
