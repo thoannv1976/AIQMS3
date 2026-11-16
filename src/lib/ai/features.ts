@@ -136,7 +136,9 @@ Trình bày bằng Markdown với ĐÚNG 5 tiêu đề cấp 3 theo thứ tự s
 ### Kế hoạch cải tiến
 Yêu cầu: tổng cộng khoảng 500–800 từ; mỗi nhận định có số liệu hoặc khẳng định phải kèm mã minh chứng trong ngoặc vuông, đúng mã như danh sách (ví dụ [MC-1.1.01]); không bịa mã.
 Điểm mạnh và Tồn tại viết dạng gạch đầu dòng; Kế hoạch cải tiến nêu hành động, đơn vị thực hiện, thời hạn.
+Hôm nay là ${new Date().toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}: mọi thời hạn trong Kế hoạch cải tiến phải sau ngày này.
 Chỉ sử dụng thông tin từ minh chứng dưới đây; nếu thiếu dữ liệu định lượng thì ghi rõ "cần bổ sung số liệu".
+Không thêm câu lưu ý/miễn trừ kiểu "đây là bản nháp do AI…" vào cuối bài (giao diện đã ghi rõ đây là bản nháp AI).
 ${input.notes ? `Ghi chú: ${input.notes}\n` : ""}
 Minh chứng:\n${evidence}`,
     fallback: () =>

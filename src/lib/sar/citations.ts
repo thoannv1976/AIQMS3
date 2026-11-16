@@ -3,10 +3,17 @@
 import { prisma } from "../db";
 import { APPROVED_LIKE, validityState } from "../access";
 
-/** Codes inside square brackets that look like evidence codes: [MC-1.1.01], [E-2.3-04], [H1.01.02.03]. */
+/**
+ * Codes inside square brackets that look like evidence codes: [MC-1.1.01], [E-2.3-04], [H1.01.02.03],
+ * and free-form codes of 3+ segments with a digit: [01-THONG-TIN-KHAI-BAO], [DC-AIKD101-NHAP-MON].
+ * Plain "[1.1]" or "[2025]" are not treated as citations.
+ */
 export function extractCitationCodes(text: string): string[] {
   const out = new Set<string>();
   for (const m of text.matchAll(/\[([A-Za-z]{1,4}[-_.]?\d[\w.\-]*)\]/g)) out.add(m[1].trim());
+  for (const m of text.matchAll(/\[([A-Za-z0-9]+(?:[-_.][A-Za-z0-9]+){2,})\]/g)) {
+    if (/\d/.test(m[1])) out.add(m[1].trim());
+  }
   return [...out];
 }
 
