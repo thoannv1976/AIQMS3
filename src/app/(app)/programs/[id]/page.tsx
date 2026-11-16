@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { FolderArchive, FileText, Target, BookOpen, ClipboardCheck } from "lucide-react";
+import { FolderArchive, FileText, Target, ClipboardCheck } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { roleLabel } from "@/lib/rbac";
 import { getProgramStats } from "@/lib/metrics";
 import { Card, CardContent, CardHeader, CardTitle, Badge, PageHeader, LinkButton, Th, Td } from "@/components/ui";
-import { StatCard, Progress, DescItem } from "@/components/widgets";
+import { StatCard, DescItem } from "@/components/widgets";
 import { degreeLevel, programVersionStatus, cycleStatus } from "@/lib/labels";
 import { formatDate } from "@/lib/utils";
 
@@ -25,7 +26,14 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
   });
   if (!program) notFound();
 
-  const stats = await getProgramStats(program.id);
+  const [stats, teamRoles] = await Promise.all([
+    getProgramStats(program.id),
+    prisma.userProgramRole.findMany({
+      where: { programId: id },
+      include: { user: { select: { fullName: true } } },
+      orderBy: { role: "asc" },
+    }),
+  ]);
 
   return (
     <div>
@@ -149,6 +157,24 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
                   <Badge color={cycleStatus[c.status].color}>{cycleStatus[c.status].label}</Badge>
                 </div>
               ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Phân công vai trò</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {teamRoles.length === 0 ? (
+                <p className="text-sm text-slate-500">Chưa phân công vai trò theo chương trình (cấu hình tại Quản trị người dùng).</p>
+              ) : (
+                teamRoles.map((t) => (
+                  <div key={t.id} className="flex items-center justify-between text-sm">
+                    <span className="text-slate-700">{t.user.fullName}</span>
+                    <Badge color="blue">{roleLabel(t.role)}</Badge>
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
         </div>

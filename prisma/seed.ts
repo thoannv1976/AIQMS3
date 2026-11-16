@@ -403,7 +403,10 @@ async function main() {
     ["Hoàn thiện hồ sơ đội ngũ giảng viên", "Phòng TCNS", "DONE", "MEDIUM", -10, "5.1"],
     ["Chuẩn bị lịch làm việc đoàn đánh giá ngoài", "Phòng KT&ĐBCL", "TODO", "URGENT", 21, null as unknown as string],
   ];
+  let taskIdx = 0;
   for (const [title, unit, status, priority, due, crit] of taskDefs) {
+    // Stagger start dates so the Gantt view shows a spread of bars.
+    const span = 10 + (taskIdx % 3) * 6; // 10–22 day tasks
     await prisma.task.create({
       data: {
         programId: program.id,
@@ -413,11 +416,13 @@ async function main() {
         unit,
         status,
         priority,
+        startDate: new Date(Date.now() + (due - span) * day),
         dueDate: new Date(Date.now() + due * day),
         assigneeId: qa.id,
         createdById: qa.id,
       },
     });
+    taskIdx += 1;
   }
 
   // ---------------- Surveys ----------------
@@ -427,6 +432,7 @@ async function main() {
       title: "Khảo sát nhà tuyển dụng về năng lực sinh viên tốt nghiệp",
       audience: "EMPLOYER",
       status: "CLOSED",
+      createdAt: new Date(2022, 5, 15),
       questions: {
         create: [
           { text: "Mức độ hài lòng về năng lực chuyên môn", type: "LIKERT", order: 1 },
@@ -469,21 +475,58 @@ async function main() {
     },
   });
 
-  // ---------------- OBE outcome assessment ----------------
-  const obeDefs: Array<[string, number, number]> = [
-    ["PLO1", 82, 70], ["PLO2", 76, 70], ["PLO3", 61, 70], ["PLO4", 79, 70],
-    ["PLO5", 73, 70], ["PLO6", 88, 70], ["PLO7", 64, 70],
+  // Multi-year satisfaction surveys → stakeholder comparison + trend analysis.
+  const audVi: Record<string, string> = { STUDENT: "sinh viên", ALUMNI: "cựu sinh viên", EMPLOYER: "nhà tuyển dụng" };
+  const satProfile: Array<{ audience: "STUDENT" | "ALUMNI" | "EMPLOYER"; avgByYear: Record<number, number> }> = [
+    { audience: "STUDENT", avgByYear: { 2023: 3.4, 2024: 3.7, 2025: 4.0 } },
+    { audience: "ALUMNI", avgByYear: { 2023: 3.6, 2024: 3.7, 2025: 3.9 } },
+    { audience: "EMPLOYER", avgByYear: { 2023: 3.3, 2024: 3.5, 2025: 3.8 } },
+  ];
+  for (const { audience, avgByYear } of satProfile) {
+    for (const [yearStr, avg] of Object.entries(avgByYear)) {
+      const year = Number(yearStr);
+      const sv = await prisma.survey.create({
+        data: {
+          programId: program.id,
+          title: `Khảo sát hài lòng ${audVi[audience]} ${year}`,
+          audience,
+          status: "CLOSED",
+          createdAt: new Date(year, 5, 15),
+          questions: { create: [{ text: "Mức độ hài lòng tổng thể về chương trình", type: "LIKERT", order: 1 }] },
+        },
+        include: { questions: true },
+      });
+      const q = sv.questions[0];
+      // Symmetric offsets (sum 0) preserve the target mean while keeping a realistic spread.
+      const offsets = [-0.6, -0.3, -0.1, 0, 0, 0.1, 0.3, 0.6];
+      for (let i = 0; i < offsets.length; i++) {
+        const resp = await prisma.surveyResponse.create({
+          data: { surveyId: sv.id, respondent: `${audience}-${year}-${i + 1}`, submittedAt: new Date(year, 5, 20) },
+        });
+        const v = Math.round(Math.max(1, Math.min(5, avg + offsets[i])) * 100) / 100;
+        await prisma.surveyAnswer.create({ data: { responseId: resp.id, questionId: q.id, valueNumber: v } });
+      }
+    }
+  }
+
+  // ---------------- OBE outcome assessment (multi-period for trend analysis) ----------------
+  const obePeriods: Array<{ semester: string; cohort: string; rates: Record<string, number> }> = [
+    { semester: "2024-1", cohort: "K2021", rates: { PLO1: 70, PLO2: 80, PLO3: 55, PLO4: 79, PLO5: 67, PLO6: 85, PLO7: 73 } },
+    { semester: "2024-2", cohort: "K2021", rates: { PLO1: 76, PLO2: 78, PLO3: 58, PLO4: 79, PLO5: 70, PLO6: 86, PLO7: 69 } },
+    { semester: "2025-1", cohort: "K2022", rates: { PLO1: 82, PLO2: 76, PLO3: 61, PLO4: 79, PLO5: 73, PLO6: 88, PLO7: 64 } },
   ];
   await prisma.outcomeAssessment.createMany({
-    data: obeDefs.map(([ploCode, achievedRate, threshold]) => ({
-      programId: program.id,
-      ploCode,
-      cohort: "K2022",
-      semester: "2025-1",
-      achievedRate,
-      threshold,
-      sampleSize: 180,
-    })),
+    data: obePeriods.flatMap((p) =>
+      Object.entries(p.rates).map(([ploCode, achievedRate]) => ({
+        programId: program.id,
+        ploCode,
+        cohort: p.cohort,
+        semester: p.semester,
+        achievedRate,
+        threshold: 70,
+        sampleSize: 180,
+      })),
+    ),
   });
 
   // ---------------- Improvement plans (PDCA) ----------------
@@ -515,6 +558,137 @@ async function main() {
     ],
   });
 
+  // ---------------- External-review recommendations ----------------
+  await prisma.recommendation.createMany({
+    data: [
+      {
+        cycleId: cycle.id, criterionId: critByCode("2.1").id, assessor: "AUN-QA",
+        content: "Làm rõ sự tương thích (constructive alignment) giữa CLO, phương pháp dạy-học và đánh giá ở các học phần cốt lõi.",
+        priority: "HIGH", responsibleUnit: "Bộ môn HTTT", status: "PLAN",
+        dueDate: new Date(Date.now() + 100 * day),
+      },
+      {
+        cycleId: cycle.id, criterionId: critByCode("8.2").id, assessor: "AUN-QA",
+        content: "Bổ sung minh chứng phản hồi của nhà tuyển dụng và tỷ lệ việc làm của người tốt nghiệp.",
+        priority: "MEDIUM", responsibleUnit: "Phòng CTSV", status: "DO",
+        response:
+          "Đơn vị tiếp thu khuyến nghị. Đã xây dựng kế hoạch khảo sát nhà tuyển dụng và cựu sinh viên trong học kỳ tới; kết quả và biên bản sẽ được bổ sung vào hồ sơ minh chứng tiêu chí 8.2.",
+        respondedAt: new Date(Date.now() - 10 * day),
+        dueDate: new Date(Date.now() + 60 * day),
+      },
+      {
+        cycleId: cycle.id, criterionId: critByCode("4.2").id, assessor: "AUN-QA",
+        content: "Chuẩn hóa rubric đánh giá và công bố công khai tiêu chí chấm cho người học.",
+        priority: "MEDIUM", responsibleUnit: "Bộ môn HTTT", status: "PLAN",
+        dueDate: new Date(Date.now() + 80 * day),
+      },
+    ],
+  });
+
+  // ================= Second program (cross-program benchmark) =================
+  const program2 = await prisma.program.create({
+    data: {
+      facultyId: faculty.id,
+      code: "CS",
+      nameVi: "Khoa học máy tính",
+      nameEn: "Computer Science",
+      degreeLevel: "BACHELOR",
+      totalCredits: 135,
+      objectives: "Đào tạo cử nhân Khoa học máy tính có năng lực nghiên cứu và phát triển phần mềm.",
+    },
+  });
+  const cycle2 = await prisma.accreditationCycle.create({
+    data: {
+      programId: program2.id,
+      standardSetId: standardSet.id,
+      name: "Kiểm định AUN-QA 2026 — Khoa học máy tính",
+      year: 2026,
+      status: "SELF_ASSESSMENT",
+      startDate: new Date(2026, 0, 15),
+      targetDate: new Date(2026, 10, 30),
+    },
+  });
+  const ev2Defs: Array<{ code: string; title: string; crit: string[]; status: "APPROVED" | "SUBMITTED" | "UPLOADED"; provider: string; text?: string }> = [
+    { code: "E-1.1-01", title: "Quyết định ban hành chuẩn đầu ra CTĐT KHMT", crit: ["1.1"], status: "APPROVED", provider: "Phòng Đào tạo", text: "Chuẩn đầu ra chương trình Khoa học máy tính được xây dựng theo CDIO, phù hợp tầm nhìn và sứ mạng nhà trường." },
+    { code: "E-2.1-01", title: "Khung chương trình và ma trận chuẩn đầu ra", crit: ["2.1", "2.2"], status: "APPROVED", provider: "Khoa CNTT", text: "Cấu trúc chương trình KHMT thể hiện tính tích hợp giữa nền tảng toán-tin và chuyên ngành." },
+    { code: "E-4.1-01", title: "Quy định đánh giá người học", crit: ["4.1"], status: "SUBMITTED", provider: "Bộ môn HTTT" },
+    { code: "E-7.1-01", title: "Danh mục phòng lab và học liệu", crit: ["7.1"], status: "UPLOADED", provider: "Trung tâm CNTT" },
+    { code: "E-8.1-01", title: "Thống kê tỷ lệ tốt nghiệp 2021-2025", crit: ["8.1"], status: "SUBMITTED", provider: "Phòng Đào tạo", text: "Tỷ lệ tốt nghiệp đúng hạn của chương trình KHMT đạt trên 80% trong ba khóa gần nhất." },
+  ];
+  for (const ev of ev2Defs) {
+    const e = await prisma.evidence.create({
+      data: {
+        programId: program2.id, cycleId: cycle2.id, code: ev.code, title: ev.title,
+        providerUnit: ev.provider, fileName: `${ev.code.toLowerCase()}.pdf`, fileType: "application/pdf", fileSize: 200000,
+        storagePath: `local://evidence/CS/2026/${ev.code}.pdf`, status: ev.status, confidentiality: "INTERNAL",
+        uploadedById: qa.id,
+        approvedById: ev.status === "APPROVED" ? facultyHead.id : null,
+        approvedAt: ev.status === "APPROVED" ? new Date() : null,
+        criterionLinks: { create: ev.crit.map((c) => ({ criterionId: critByCode(c).id })) },
+      },
+    });
+    if (ev.text) {
+      const doc = await prisma.document.create({
+        data: { evidenceId: e.id, programId: program2.id, fileName: e.fileName!, fileType: e.fileType, extractedText: ev.text, summary: ev.text.slice(0, 160), language: "vi", status: "READY" },
+      });
+      const chunks = chunkText(ev.text);
+      await prisma.documentChunk.createMany({
+        data: chunks.map((content, i) => ({ documentId: doc.id, chunkIndex: i, content, tokenCount: content.split(/\s+/).length, embedding: embedText(content) })),
+      });
+    }
+  }
+  const report2 = await prisma.selfAssessmentReport.create({
+    data: { cycleId: cycle2.id, title: "Báo cáo tự đánh giá chương trình KHMT theo AUN-QA 2026", status: "DRAFT" },
+  });
+  let order2 = 0;
+  for (const std of aunStandards) {
+    await prisma.reportSection.create({
+      data: {
+        reportId: report2.id,
+        criterionId: critByCode(std[2][0][0]).id,
+        title: `Tiêu chuẩn ${std[0]}: ${std[1]}`,
+        content: order2 < 2 ? `Chương trình KHMT đáp ứng yêu cầu cơ bản của tiêu chuẩn ${std[0]}; đang tiếp tục bổ sung minh chứng và số liệu.` : null,
+        strengths: order2 < 2 ? "Nền tảng học thuật vững, đội ngũ giảng viên có năng lực nghiên cứu." : null,
+        status: order2 < 2 ? "DONE" : order2 < 4 ? "DRAFTING" : "NOT_STARTED",
+        order: order2++,
+        assignedToId: qa.id,
+        reviewerId: facultyHead.id,
+      },
+    });
+  }
+  await prisma.outcomeAssessment.createMany({
+    data: ([["PLO1", 72], ["PLO2", 68], ["PLO3", 58], ["PLO4", 75], ["PLO5", 64]] as Array<[string, number]>).map(
+      ([ploCode, achievedRate]) => ({ programId: program2.id, ploCode, cohort: "K2022", semester: "2025-1", achievedRate, threshold: 70, sampleSize: 120 }),
+    ),
+  });
+
+  // ---------------- Program-scoped role assignments (demo) ----------------
+  // Scopes these users to a single program (and elevates the department head in CS).
+  await prisma.userProgramRole.createMany({
+    data: [
+      { userId: byRole("LECTURER").id, programId: program.id, role: "LECTURER" },
+      { userId: byRole("DEPARTMENT").id, programId: program2.id, role: "FACULTY" },
+    ],
+    skipDuplicates: true,
+  });
+
+  // ---------------- Notifications (demo) ----------------
+  await prisma.notification.createMany({
+    data: [
+      { userId: byRole("ADMIN").id, title: "Chào mừng đến với AIQMS3", message: "Hệ thống quản lý ĐBCL & kiểm định chương trình đào tạo.", link: "/dashboard", read: true },
+      { userId: qa.id, title: "Có nhiệm vụ kiểm định sắp đến hạn", message: "Kiểm tra danh sách nhiệm vụ trong tuần này.", link: "/tasks" },
+      { userId: qa.id, title: "Minh chứng mới cần rà soát", message: "Một số minh chứng đang ở trạng thái chờ rà soát.", link: "/evidence" },
+    ],
+  });
+
+  // ---------------- Approval flow (demo, 2-step on the SAR) ----------------
+  await prisma.approvalFlow.createMany({
+    data: [
+      { entityType: "report", entityId: report.id, requestedById: qa.id, approverId: facultyHead.id, step: 1, status: "PENDING" },
+      { entityType: "report", entityId: report.id, requestedById: qa.id, approverId: byRole("BOARD").id, step: 2, status: "PENDING" },
+    ],
+  });
+
   // ---------------- Audit log samples ----------------
   await prisma.auditLog.createMany({
     data: [
@@ -525,7 +699,7 @@ async function main() {
     ],
   });
 
-  console.log(`✅ Done. ${users.length} users, 1 program, ${courses.length} courses, ${allCriteria.length} criteria, ${evidenceDefs.length} evidence.`);
+  console.log(`✅ Done. ${users.length} users, 2 programs, ${courses.length} courses, ${allCriteria.length} criteria, ${evidenceDefs.length + ev2Defs.length} evidence.`);
   console.log("   Login: admin@aiqms.edu.vn / Aiqms@123");
 }
 

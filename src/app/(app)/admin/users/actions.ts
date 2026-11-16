@@ -6,6 +6,8 @@ import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { hashPassword } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import { createNotification } from "@/lib/notify";
+import { ROLE_LABELS } from "@/lib/rbac";
 import { Role } from "@/generated/prisma/enums";
 
 export interface FormState {
@@ -33,6 +35,47 @@ export async function createUser(_prev: FormState, formData: FormData): Promise<
   await logAudit({ userId: actor.id, action: "CREATE", entityType: "User", entityId: created.id, detail: { email, role } });
   revalidatePath("/admin/users");
   return { ok: true };
+}
+
+export async function assignProgramRoleAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const actor = await requireUser();
+  if (!can(actor.role, "admin:users")) return { error: "Bạn không có quyền quản trị người dùng." };
+
+  const userId = String(formData.get("userId") || "");
+  const programId = String(formData.get("programId") || "");
+  const role = String(formData.get("role") || "") as Role;
+  if (!userId || !programId || !role) return { error: "Chọn đủ người dùng, chương trình và vai trò." };
+
+  await prisma.userProgramRole.upsert({
+    where: { userId_programId_role: { userId, programId, role } },
+    update: {},
+    create: { userId, programId, role },
+  });
+  await logAudit({
+    userId: actor.id,
+    action: "ASSIGN_PROGRAM_ROLE",
+    entityType: "UserProgramRole",
+    entityId: userId,
+    detail: { programId, role },
+  });
+
+  const program = await prisma.program.findUnique({ where: { id: programId }, select: { code: true } });
+  await createNotification({
+    userId,
+    title: `Bạn được phân công vai trò ${ROLE_LABELS[role]}`,
+    message: program ? `Trong chương trình ${program.code}` : undefined,
+    link: `/programs/${programId}`,
+  });
+  revalidatePath("/admin/users");
+  return { ok: true };
+}
+
+export async function removeProgramRoleAction(id: string): Promise<void> {
+  const actor = await requireUser();
+  if (!can(actor.role, "admin:users")) return;
+  await prisma.userProgramRole.deleteMany({ where: { id } });
+  await logAudit({ userId: actor.id, action: "REMOVE_PROGRAM_ROLE", entityType: "UserProgramRole", entityId: id });
+  revalidatePath("/admin/users");
 }
 
 export async function toggleUserActiveAction(userId: string): Promise<void> {

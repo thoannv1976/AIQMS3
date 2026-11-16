@@ -149,6 +149,11 @@ enum ApprovalStatus {
   REJECTED
 }
 
+enum ImprovementPhase {
+  BEFORE // minh chứng hiện trạng trước cải tiến
+  AFTER // minh chứng kết quả sau cải tiến
+}
+
 enum AiAnalysisType {
   SUMMARY
   CRITERION_SUGGESTION
@@ -221,6 +226,8 @@ model User {
   notifications     Notification[]
   aiResults         AiAnalysisResult[]
   chatSessions      AiChatSession[]
+  aiUsageLogs       AiUsageLog[]
+  settingsUpdated   AppSetting[]
   approvalsRequested ApprovalFlow[]   @relation("ApprovalRequester")
   approvalsToDecide  ApprovalFlow[]   @relation("ApprovalApprover")
 }
@@ -475,6 +482,7 @@ model Evidence {
   updatedAt       DateTime        @updatedAt
 
   criterionLinks EvidenceCriterionLink[]
+  improvementLinks ImprovementEvidenceLink[]
   document       Document?
 
   @@unique([programId, code])
@@ -543,6 +551,23 @@ model ImprovementPlan {
   source          String? // SAR / external review / survey
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
+
+  evidenceLinks   ImprovementEvidenceLink[]
+  recommendations Recommendation[]
+}
+
+// Before/after evidence attached to an improvement plan (closed-loop PDCA).
+model ImprovementEvidenceLink {
+  id            String           @id @default(cuid())
+  improvementId String
+  improvement   ImprovementPlan  @relation(fields: [improvementId], references: [id], onDelete: Cascade)
+  evidenceId    String
+  evidence      Evidence         @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  phase         ImprovementPhase
+  note          String?
+  createdAt     DateTime         @default(now())
+
+  @@unique([improvementId, evidenceId, phase])
 }
 
 model Recommendation {
@@ -556,6 +581,12 @@ model Recommendation {
   responsibleUnit String?
   dueDate         DateTime?
   status          PdcaStatus @default(PLAN)
+  // External-review handling: institutional explanation/response + linked corrective plan.
+  assessor        String? // tổ chức/đoàn đánh giá ngoài
+  response        String? // nội dung giải trình của đơn vị
+  respondedAt     DateTime?
+  improvementPlanId String?
+  improvementPlan ImprovementPlan? @relation(fields: [improvementPlanId], references: [id], onDelete: SetNull)
   createdAt       DateTime   @default(now())
 }
 
@@ -636,6 +667,7 @@ model Task {
   status      TaskStatus   @default(TODO)
   priority    TaskPriority @default(MEDIUM)
   unit        String?
+  startDate   DateTime?
   dueDate     DateTime?
   assigneeId  String?
   assignee    User?        @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
@@ -724,6 +756,37 @@ model AiChatMessage {
   createdAt DateTime @default(now())
 }
 
+// Per-call AI usage ledger — powers the admin token/cost dashboard.
+model AiUsageLog {
+  id           String   @id @default(cuid())
+  feature      String // evidence_summary | criterion_suggestion | sar_draft | sar_review | survey_analysis | improvement_suggestion | rag_chat | matrix_check | connection_test | other
+  model        String
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  totalTokens  Int      @default(0)
+  costUsd      Float    @default(0)
+  usedFallback Boolean  @default(false) // true => local heuristic, no external call
+  success      Boolean  @default(true)
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([feature])
+}
+
+// ============================ APP SETTINGS ============================
+
+// Generic key/value settings store. AI config lives under key "ai.config"
+// with value { model, mode, apiKeyEnc, apiKeyLast4 } (apiKeyEnc is AES-256-GCM).
+model AppSetting {
+  key         String   @id
+  value       Json
+  updatedById String?
+  updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime @default(now()) @updatedAt
+}
+
 // ============================ AUDIT & APPROVAL ============================
 
 model AuditLog {
@@ -749,6 +812,7 @@ model ApprovalFlow {
   requestedBy   User?          @relation("ApprovalRequester", fields: [requestedById], references: [id], onDelete: SetNull)
   approverId    String?
   approver      User?          @relation("ApprovalApprover", fields: [approverId], references: [id], onDelete: SetNull)
+  step          Int            @default(1) // order within a multi-step approval chain
   status        ApprovalStatus @default(PENDING)
   note          String?
   createdAt     DateTime       @default(now())

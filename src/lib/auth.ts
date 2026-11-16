@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { cache } from "react";
 import { SignJWT, jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
 import { prisma } from "./db";
@@ -56,7 +57,8 @@ async function getSessionUserId(): Promise<string | null> {
   }
 }
 
-export async function getCurrentUser() {
+// Cached per request so repeated calls (e.g. requireUser + resolveProgram) hit the DB once.
+export const getCurrentUser = cache(async () => {
   const uid = await getSessionUserId();
   if (!uid) return null;
   const user = await prisma.user.findUnique({
@@ -65,7 +67,7 @@ export async function getCurrentUser() {
   });
   if (!user || !user.isActive) return null;
   return user;
-}
+});
 
 export type SessionUser = NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>;
 

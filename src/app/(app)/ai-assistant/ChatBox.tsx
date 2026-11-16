@@ -6,7 +6,7 @@ import { Send, Sparkles, FileText, User } from "lucide-react";
 import { Button, Badge } from "@/components/ui";
 import { askAction, type AskResult } from "./actions";
 
-interface Message {
+export interface Message {
   role: "user" | "assistant";
   text: string;
   usedFallback?: boolean;
@@ -20,8 +20,17 @@ const SAMPLES = [
   "Tỷ lệ sinh viên có việc làm sau tốt nghiệp là bao nhiêu?",
 ];
 
-export function ChatBox({ programId }: { programId: string }) {
-  const [messages, setMessages] = useState<Message[]>([]);
+export function ChatBox({
+  programId,
+  initialMessages = [],
+  initialSessionId,
+}: {
+  programId: string;
+  initialMessages?: Message[];
+  initialSessionId?: string;
+}) {
+  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [sessionId, setSessionId] = useState<string | undefined>(initialSessionId);
   const [input, setInput] = useState("");
   const [pending, start] = useTransition();
   const endRef = useRef<HTMLDivElement>(null);
@@ -36,7 +45,8 @@ export function ChatBox({ programId }: { programId: string }) {
     setMessages((m) => [...m, { role: "user", text: q }]);
     setInput("");
     start(async () => {
-      const res = await askAction(programId, q);
+      const res = await askAction(programId, q, sessionId);
+      setSessionId(res.sessionId);
       setMessages((m) => [...m, { role: "assistant", text: res.text, usedFallback: res.usedFallback, citations: res.citations }]);
     });
   }

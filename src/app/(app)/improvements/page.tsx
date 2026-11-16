@@ -7,6 +7,7 @@ import { ProgramSwitcher } from "@/components/program-switcher";
 import { Card, CardContent, LinkButton, PageHeader, Badge, EmptyState } from "@/components/ui";
 import { formatDate } from "@/lib/utils";
 import { PdcaSelect } from "./PdcaSelect";
+import { ImprovementEvidenceBlock } from "./ImprovementEvidenceBlock";
 
 export default async function ImprovementsPage({ searchParams }: { searchParams: Promise<{ program?: string }> }) {
   const user = await requireUser();
@@ -17,8 +18,19 @@ export default async function ImprovementsPage({ searchParams }: { searchParams:
   const plans = selected
     ? await prisma.improvementPlan.findMany({
         where: { programId: selected.id },
-        include: { criterion: true },
+        include: {
+          criterion: true,
+          evidenceLinks: { include: { evidence: { select: { id: true, code: true, title: true } } } },
+        },
         orderBy: { createdAt: "desc" },
+      })
+    : [];
+
+  const evidenceOptions = selected
+    ? await prisma.evidence.findMany({
+        where: { programId: selected.id },
+        select: { id: true, code: true, title: true },
+        orderBy: { code: "asc" },
       })
     : [];
 
@@ -65,6 +77,12 @@ export default async function ImprovementsPage({ searchParams }: { searchParams:
                   </div>
                   <PdcaSelect id={p.id} status={p.status} disabled={!canWrite} />
                 </div>
+                <ImprovementEvidenceBlock
+                  improvementId={p.id}
+                  links={p.evidenceLinks.map((l) => ({ id: l.id, phase: l.phase, evidence: l.evidence }))}
+                  options={evidenceOptions}
+                  canWrite={canWrite}
+                />
               </CardContent>
             </Card>
           ))}

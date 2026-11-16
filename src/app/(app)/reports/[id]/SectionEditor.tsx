@@ -1,11 +1,17 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Wand2, ClipboardCheck, Save, ChevronDown } from "lucide-react";
+import { Wand2, ClipboardCheck, Save, ChevronDown, Gauge, CheckCircle2, XCircle } from "lucide-react";
 import { Button, Badge, Textarea, Select, Label } from "@/components/ui";
+import type { BadgeColor } from "@/components/ui";
+import { Progress } from "@/components/widgets";
 import { reportSectionStatus } from "@/lib/labels";
-import { saveSectionAction, draftSectionAction, reviewSectionAction } from "../actions";
+import { saveSectionAction, draftSectionAction, reviewSectionAction, reviewSectionAdvancedAction } from "../actions";
+import type { AdvancedReviewResult } from "../actions";
 import { ReportSectionStatus } from "@/generated/prisma/enums";
+
+const BAND_COLOR: Record<string, BadgeColor> = { strong: "green", adequate: "blue", weak: "amber", missing: "red" };
+const BAND_LABEL: Record<string, string> = { strong: "Mạnh", adequate: "Đạt", weak: "Yếu", missing: "Thiếu" };
 
 interface SectionData {
   id: string;
@@ -29,6 +35,7 @@ export function SectionEditor({ section, canWrite }: { section: SectionData; can
   const [pending, start] = useTransition();
   const [draft, setDraft] = useState<{ text: string; usedFallback: boolean } | null>(null);
   const [review, setReview] = useState<{ text: string; usedFallback: boolean } | null>(null);
+  const [adv, setAdv] = useState<AdvancedReviewResult | null>(null);
   const [saved, setSaved] = useState(false);
 
   const meta = reportSectionStatus[status];
@@ -67,6 +74,40 @@ export function SectionEditor({ section, canWrite }: { section: SectionData; can
               >
                 <ClipboardCheck className="h-4 w-4" /> AI rà soát
               </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={pending}
+                onClick={() => start(async () => setAdv(await reviewSectionAdvancedAction(section.id)))}
+              >
+                <Gauge className="h-4 w-4" /> AI rà soát nâng cao
+              </Button>
+            </div>
+          )}
+
+          {adv && (
+            <div className="rounded-lg border border-slate-200 bg-white p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-sm font-semibold text-slate-700">
+                  Chất lượng SAR: {adv.quality.score}/100{" "}
+                  <Badge color={BAND_COLOR[adv.quality.band] ?? "slate"}>{BAND_LABEL[adv.quality.band] ?? adv.quality.band}</Badge>
+                </span>
+                {adv.usedFallback && <Badge color="amber">dự phòng</Badge>}
+              </div>
+              <Progress value={adv.quality.score} />
+              <ul className="mt-3 grid gap-1 sm:grid-cols-2">
+                {adv.quality.checks.map((c, i) => (
+                  <li key={i} className="flex items-start gap-1.5 text-xs">
+                    {c.passed ? (
+                      <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-green-500" />
+                    ) : (
+                      <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-300" />
+                    )}
+                    <span className={c.passed ? "text-slate-600" : "text-slate-400"}>{c.label}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="prose-ai mt-3 whitespace-pre-wrap border-t border-slate-100 pt-3 text-sm text-slate-700">{adv.text}</p>
             </div>
           )}
 

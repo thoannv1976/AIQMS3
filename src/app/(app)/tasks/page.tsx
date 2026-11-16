@@ -1,4 +1,5 @@
-import { Plus } from "lucide-react";
+import Link from "next/link";
+import { Plus, KanbanSquare, GanttChartSquare } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
@@ -7,15 +8,18 @@ import { ProgramSwitcher } from "@/components/program-switcher";
 import { LinkButton, PageHeader, EmptyState } from "@/components/ui";
 import { taskStatus } from "@/lib/labels";
 import { TaskCard, type TaskItem } from "./TaskCard";
+import { GanttChart, type GanttItem } from "./GanttChart";
 import { TaskStatus } from "@/generated/prisma/enums";
 
 const COLUMNS: TaskStatus[] = [TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.REVIEW, TaskStatus.DONE];
+const DAY = 86_400_000;
 
-export default async function TasksPage({ searchParams }: { searchParams: Promise<{ program?: string }> }) {
+export default async function TasksPage({ searchParams }: { searchParams: Promise<{ program?: string; view?: string }> }) {
   const user = await requireUser();
   const sp = await searchParams;
   const { programs, selected } = await resolveProgram(sp.program);
   const canWrite = can(user.role, "task:write");
+  const view = sp.view === "gantt" ? "gantt" : "kanban";
 
   const tasks = selected
     ? await prisma.task.findMany({
@@ -25,7 +29,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
       })
     : [];
 
-  const now = Date.now();
+  const now = new Date().getTime();
   const items: TaskItem[] = tasks.map((t) => ({
     id: t.id,
     title: t.title,
@@ -37,6 +41,34 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
     overdue: !!t.dueDate && t.dueDate.getTime() < now && t.status !== TaskStatus.DONE,
     canWrite,
   }));
+
+  const ganttItems: GanttItem[] = tasks
+    .filter((t) => t.dueDate)
+    .map((t) => {
+      const due = t.dueDate!;
+      const start = t.startDate ?? new Date(due.getTime() - 7 * DAY);
+      return {
+        id: t.id,
+        title: t.title,
+        unit: t.unit,
+        status: t.status,
+        criterionCode: t.criterion?.code ?? null,
+        start: start.toISOString(),
+        due: due.toISOString(),
+        overdue: due.getTime() < now && t.status !== TaskStatus.DONE,
+      };
+    });
+
+  const tab = (key: "kanban" | "gantt", label: string, Icon: typeof KanbanSquare) => (
+    <Link
+      href={`/tasks?program=${selected?.id ?? ""}${key === "gantt" ? "&view=gantt" : ""}`}
+      className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium ${
+        view === key ? "bg-white text-brand-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
+      }`}
+    >
+      <Icon className="h-4 w-4" /> {label}
+    </Link>
+  );
 
   return (
     <div>
@@ -58,25 +90,36 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
       {!selected ? (
         <EmptyState title="Chưa có chương trình" />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {COLUMNS.map((col) => {
-            const colTasks = items.filter((t) => t.status === col);
-            return (
-              <div key={col} className="rounded-xl bg-slate-100/70 p-3">
-                <div className="mb-3 flex items-center justify-between px-1">
-                  <span className="text-sm font-semibold text-slate-700">{taskStatus[col].label}</span>
-                  <span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-slate-500">{colTasks.length}</span>
-                </div>
-                <div className="space-y-2">
-                  {colTasks.map((t) => (
-                    <TaskCard key={t.id} task={t} />
-                  ))}
-                  {colTasks.length === 0 && <p className="px-1 py-4 text-center text-xs text-slate-400">Trống</p>}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <>
+          <div className="mb-4 inline-flex rounded-lg bg-slate-100 p-1">
+            {tab("kanban", "Kanban", KanbanSquare)}
+            {tab("gantt", "Gantt", GanttChartSquare)}
+          </div>
+
+          {view === "gantt" ? (
+            <GanttChart items={ganttItems} now={now} />
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {COLUMNS.map((col) => {
+                const colTasks = items.filter((t) => t.status === col);
+                return (
+                  <div key={col} className="rounded-xl bg-slate-100/70 p-3">
+                    <div className="mb-3 flex items-center justify-between px-1">
+                      <span className="text-sm font-semibold text-slate-700">{taskStatus[col].label}</span>
+                      <span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-slate-500">{colTasks.length}</span>
+                    </div>
+                    <div className="space-y-2">
+                      {colTasks.map((t) => (
+                        <TaskCard key={t.id} task={t} />
+                      ))}
+                      {colTasks.length === 0 && <p className="px-1 py-4 text-center text-xs text-slate-400">Trống</p>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
