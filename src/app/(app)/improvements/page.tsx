@@ -6,6 +6,7 @@ import { resolveProgram } from "@/lib/program-context";
 import { ProgramSwitcher } from "@/components/program-switcher";
 import { Card, CardContent, LinkButton, PageHeader, Badge, EmptyState } from "@/components/ui";
 import { formatDate } from "@/lib/utils";
+import { Markdown } from "@/components/markdown";
 import { PdcaSelect } from "./PdcaSelect";
 import { ImprovementEvidenceBlock } from "./ImprovementEvidenceBlock";
 
@@ -69,10 +70,20 @@ export default async function ImprovementsPage({ searchParams }: { searchParams:
                     </div>
                     <div className="mt-2 grid gap-2 text-sm text-slate-600 md:grid-cols-2">
                       {p.rootCause && <p><span className="text-slate-400">Nguyên nhân: </span>{p.rootCause}</p>}
-                      {p.action && <p><span className="text-slate-400">Hành động: </span>{p.action}</p>}
                       {p.responsibleUnit && <p><span className="text-slate-400">Phụ trách: </span>{p.responsibleUnit}</p>}
                       {p.kpi && <p><span className="text-slate-400">KPI: </span>{p.kpi}</p>}
                     </div>
+                    {p.action &&
+                      (p.action.includes("\n") ? (
+                        <details className="mt-2 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 text-sm text-slate-600">
+                          <summary className="cursor-pointer text-slate-500">
+                            Hành động cải tiến <span className="text-xs text-slate-400">(bấm để mở/thu gọn)</span>
+                          </summary>
+                          <Markdown text={p.action} className="mt-2" />
+                        </details>
+                      ) : (
+                        <p className="mt-2 text-sm text-slate-600"><span className="text-slate-400">Hành động: </span>{p.action}</p>
+                      ))}
                     {p.dueDate && <p className="mt-1 text-xs text-slate-400">Hạn: {formatDate(p.dueDate)}</p>}
                   </div>
                   <PdcaSelect id={p.id} status={p.status} disabled={!canWrite} />
