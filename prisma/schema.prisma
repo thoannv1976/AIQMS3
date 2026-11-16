@@ -892,6 +892,8 @@ model AiUsageLog {
   id           String   @id @default(cuid())
   feature      String // evidence_summary | criterion_suggestion | sar_draft | sar_review | survey_analysis | improvement_suggestion | rag_chat | matrix_check | connection_test | other
   model        String
+  provider     String? // anthropic | openai | gemini (null = trước khi có đa nhà cung cấp → anthropic)
+  tier         String? // high | economy
   inputTokens  Int      @default(0)
   outputTokens Int      @default(0)
   totalTokens  Int      @default(0)
@@ -904,6 +906,7 @@ model AiUsageLog {
 
   @@index([createdAt])
   @@index([feature])
+  @@index([userId, createdAt])
 }
 
 // ============================ APP SETTINGS ============================

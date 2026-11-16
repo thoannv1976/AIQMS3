@@ -5,6 +5,17 @@ import { useRouter } from "next/navigation";
 import { Loader2, CheckSquare } from "lucide-react";
 import { Button, Select, Input } from "@/components/ui";
 import { bulkEvidenceAction, type BulkOp } from "./bulk-actions";
+import { estimateAiCostAction, type CostEstimate } from "../ai/actions";
+
+function confirmText(kind: string, n: number, e: CostEstimate): string {
+  if (e.aiOff) return `AI đang tắt hoặc chưa có khóa API – ${kind} sẽ dùng chế độ quy tắc. Tiếp tục?`;
+  const room = [e.remainingMonth != null ? `tháng còn $${e.remainingMonth.toFixed(2)}` : "", e.remainingDay != null ? `hôm nay còn $${e.remainingDay.toFixed(2)}` : ""].filter(Boolean).join(", ");
+  return `${kind}: ${n} mục × ≈$${e.perItem.toFixed(3)} ≈ $${e.total.toFixed(2)} (${e.provider} · ${e.model}).` +
+    (room ? `\nHạn mức: ${room}.` : "") +
+    (e.exceeds ? "\n⚠ Dự kiến vượt hạn mức – quá trình sẽ tự dừng khi chạm hạn mức." : "") +
+    "\n\nTiếp tục?";
+}
+
 
 export const BULK_FORM_ID = "ev-bulk";
 
@@ -71,6 +82,11 @@ export function EvidenceBulkBar({
         e.preventDefault();
         const fd = new FormData(e.currentTarget);
         start(async () => {
+          if (op === "ai_check") {
+            const n = Math.min(count, 25);
+            const est = await estimateAiCostAction("evidence_check", n);
+            if (!confirm(confirmText("AI kiểm tra minh chứng", n, est))) return;
+          }
           const r = await bulkEvidenceAction(programId, fd);
           setMsg(r.message);
           if (r.ok) {

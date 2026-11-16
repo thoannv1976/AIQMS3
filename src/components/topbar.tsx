@@ -4,6 +4,8 @@ import type { SessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { roleLabel } from "@/lib/rbac";
 import { aiConfigured } from "@/lib/ai/client";
+import { getAiConfig } from "@/lib/ai/config";
+import { PROVIDERS } from "@/lib/ai/providers";
 import { logoutAction } from "@/lib/actions/session";
 import { initials } from "@/lib/utils";
 import { getLocale, t } from "@/lib/i18n";
@@ -13,11 +15,13 @@ import { CommandPalette } from "./CommandPalette";
 import { HelpButton } from "./HelpButton";
 
 export async function Topbar({ user }: { user: SessionUser }) {
-  const [aiOn, notifications, locale] = await Promise.all([
+  const [aiOn, notifications, locale, aiCfg] = await Promise.all([
     aiConfigured(),
     prisma.notification.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 8 }),
     getLocale(),
+    getAiConfig(),
   ]);
+  const aiName = PROVIDERS[aiCfg.tiers.high.provider].label.split(" ")[0];
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6">
       <div className="text-sm text-slate-500">
@@ -34,7 +38,7 @@ export async function Topbar({ user }: { user: SessionUser }) {
           title={aiOn ? t(locale, "aiConfigured") : t(locale, "aiFallbackHint")}
         >
           <Sparkles className="h-3.5 w-3.5" />
-          {aiOn ? t(locale, "aiClaude") : t(locale, "aiFallback")}
+          {aiOn ? `AI: ${aiName}` : t(locale, "aiFallback")}
         </span>
 
         <LanguageToggle locale={locale} />

@@ -1,20 +1,23 @@
-// Thin wrapper around the Anthropic Claude API with a safe deterministic fallback.
-// Principle from the spec: AI only *suggests*; humans review and approve. Every call
-// reports whether the real model or the local fallback was used (human-in-the-loop)
-// and is recorded in the AI usage ledger (tokens + cost) for the admin dashboard.
+// Single entry point for AI text generation across providers (Claude, OpenAI, Gemini).
+// Principle from the spec: AI only *suggests*; humans review and approve. Every call:
+//   1. picks the tier for the feature ("high" quality vs "economy") and the provider chain (primary + fallbacks),
+//   2. checks the spending limits with a cost estimate before calling,
+//   3. logs provider/model/tokens/cost, and falls back to a deterministic heuristic if nothing can answer.
 
-import { getAiConfig } from "./config";
+import { getAiConfig, type AiConfig } from "./config";
 import { estimateCostUsd, logAiUsage } from "./usage";
+import { checkBudget, maybeWarn } from "./budget";
+import { callProvider, listModels, PROVIDERS, PROVIDER_IDS, ProviderError, type ProviderId, type Tier } from "./providers";
 import { prisma } from "../db";
 
 export const AI_LAST_ERROR_KEY = "ai.lastError";
 
 /** Keep the latest AI failure (e.g. "credit balance is too low") so admins see why AI fell back. */
-async function recordAiError(err: unknown): Promise<void> {
+async function recordAiError(err: unknown, provider?: string): Promise<void> {
   const raw = err instanceof Error ? err.message : String(err);
   const m = /"message"\s*:\s*"([^"]+)"/.exec(raw);
-  const message = (m?.[1] ?? raw).slice(0, 300);
-  const value = { at: new Date().toISOString(), message };
+  const message = `${provider ? `[${PROVIDERS[provider as ProviderId]?.label ?? provider}] ` : ""}${(m?.[1] ?? raw).slice(0, 300)}`;
+  const value = { at: new Date().toISOString(), message, provider: provider ?? null };
   await prisma.appSetting.upsert({ where: { key: AI_LAST_ERROR_KEY }, update: { value }, create: { key: AI_LAST_ERROR_KEY, value } }).catch(() => {});
 }
 
@@ -22,36 +25,60 @@ export interface AiResult {
   text: string;
   usedFallback: boolean;
   model: string;
+  provider?: ProviderId;
   inputTokens?: number;
   outputTokens?: number;
+  /** Set when the call was refused by the spending limits. */
+  blockedReason?: string;
 }
 
-/** Optional call metadata (which user triggered the call) for usage attribution. */
+/** Optional call metadata (which user triggered the call) for usage attribution and per-user limits. */
 export interface AiMeta {
   userId?: string | null;
 }
 
-/** True when real Claude calls are enabled under the current DB/env configuration. */
+/** Features that need the best model; everything else runs on the economy tier. */
+const HIGH_FEATURES = new Set([
+  "sar_draft", "sar_review", "sar_review_adv", "interview_questions", "leadership_brief", "external_response",
+  "gap_analysis", "curriculum_check", "matrix_check", "fact_check", "syllabus_review", "survey_analysis", "rag_chat",
+]);
+export function tierOf(feature: string): Tier {
+  return HIGH_FEATURES.has(feature) ? "high" : "economy";
+}
+
+/** Rough token estimate for budgeting (Vietnamese text ≈ 2.5 characters per token). */
+export function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 2.5);
+}
+
+/** Primary provider/model for the tier, then the fallback providers that have a key. */
+export function candidatesFor(cfg: AiConfig, tier: Tier): Array<{ provider: ProviderId; model: string }> {
+  const out: Array<{ provider: ProviderId; model: string }> = [];
+  const push = (provider: ProviderId, model: string) => {
+    if (model && cfg.keys[provider].key && !out.some((c) => c.provider === provider)) out.push({ provider, model });
+  };
+  push(cfg.tiers[tier].provider, cfg.tiers[tier].model);
+  for (const p of cfg.fallback) {
+    const other: Tier = tier === "high" ? "economy" : "high";
+    const model = cfg.tiers[tier].provider === p ? cfg.tiers[tier].model : cfg.tiers[other].provider === p ? cfg.tiers[other].model : PROVIDERS[p].defaults[tier];
+    push(p, model);
+  }
+  return out;
+}
+
+/** True when at least one provider is usable under the current configuration. */
 export async function aiConfigured(): Promise<boolean> {
   const cfg = await getAiConfig();
-  return cfg.mode !== "mock" && Boolean(cfg.apiKey);
+  return cfg.mode !== "mock" && PROVIDER_IDS.some((p) => cfg.keys[p].key);
 }
 
 export async function aiModel(): Promise<string> {
-  return (await getAiConfig()).model;
-}
-
-function extractText(content: unknown): string {
-  return (content as Array<{ type: string; text?: string }>)
-    .map((b) => (b.type === "text" ? b.text ?? "" : ""))
-    .join("\n")
-    .trim();
+  return (await getAiConfig()).tiers.high.model;
 }
 
 /**
- * Run a single completion. The API key, model and mode come from the database
- * (admin-configurable), falling back to env vars. When no key is available, or
- * mode is "mock", or the call fails, `fallback()` keeps the feature working.
+ * Run a single completion. When no provider is usable, the mode is "mock", the spending limit is reached, or
+ * every provider fails, `fallback()` keeps the feature working (and the result says so).
  */
 export async function aiComplete(opts: {
   system?: string;
@@ -60,127 +87,82 @@ export async function aiComplete(opts: {
   fallback: () => string;
   feature?: string;
   userId?: string | null;
+  tier?: Tier;
+  attachment?: { mediaType: string; base64: string; fileName: string };
 }): Promise<AiResult> {
   const cfg = await getAiConfig();
   const feature = opts.feature ?? "other";
-  const useReal = cfg.mode !== "mock" && Boolean(cfg.apiKey);
+  const tier = opts.tier ?? tierOf(feature);
+  const maxTokens = opts.maxTokens ?? 1500;
+  const fallbackResult = async (blockedReason?: string): Promise<AiResult> => {
+    await logAiUsage({ feature, model: "fallback-heuristic", tier, inputTokens: 0, outputTokens: 0, costUsd: 0, usedFallback: true, success: !blockedReason, userId: opts.userId });
+    return { text: opts.fallback(), usedFallback: true, model: "fallback-heuristic", blockedReason };
+  };
 
-  if (!useReal) {
-    const text = opts.fallback();
-    await logAiUsage({
-      feature,
-      model: "fallback-heuristic",
-      inputTokens: 0,
-      outputTokens: 0,
-      costUsd: 0,
-      usedFallback: true,
-      success: true,
-      userId: opts.userId,
-    });
-    return { text, usedFallback: true, model: "fallback-heuristic" };
+  const candidates = cfg.mode === "mock" ? [] : candidatesFor(cfg, tier);
+  if (!candidates.length) return fallbackResult();
+
+  // Spending limits: estimate with the primary model (input from text length, output at the cap).
+  const estIn = estimateTokens(`${opts.system ?? ""}${opts.prompt}`) + (opts.attachment ? Math.ceil(opts.attachment.base64.length / 3) : 0);
+  const est = estimateCostUsd(candidates[0].model, estIn, maxTokens, cfg.prices);
+  const decision = await checkBudget(cfg.budget, est, opts.userId);
+  if (!decision.ok) {
+    await recordAiError(new Error(decision.reason));
+    return fallbackResult(decision.reason);
   }
 
-  try {
-    const { default: Anthropic } = await import("@anthropic-ai/sdk");
-    const client = new Anthropic({ apiKey: cfg.apiKey! });
-    const msg = await client.messages.create({
-      model: cfg.model,
-      max_tokens: opts.maxTokens ?? 1500,
-      system: opts.system,
-      messages: [{ role: "user", content: opts.prompt }],
-    });
-    const text = extractText(msg.content);
-    const inputTokens = msg.usage?.input_tokens ?? 0;
-    const outputTokens = msg.usage?.output_tokens ?? 0;
-    await logAiUsage({
-      feature,
-      model: cfg.model,
-      inputTokens,
-      outputTokens,
-      costUsd: estimateCostUsd(cfg.model, inputTokens, outputTokens),
-      usedFallback: false,
-      success: true,
-      userId: opts.userId,
-    });
-    return { text: text || opts.fallback(), usedFallback: false, model: cfg.model, inputTokens, outputTokens };
-  } catch (err) {
-    console.error("[ai] Claude call failed, using fallback:", err);
-    await recordAiError(err);
-    await logAiUsage({
-      feature,
-      model: cfg.model,
-      inputTokens: 0,
-      outputTokens: 0,
-      costUsd: 0,
-      usedFallback: true,
-      success: false,
-      userId: opts.userId,
-    });
-    return { text: opts.fallback(), usedFallback: true, model: "fallback-heuristic" };
+  for (const c of candidates) {
+    try {
+      const r = await callProvider({ provider: c.provider, model: c.model, apiKey: cfg.keys[c.provider].key!, system: opts.system, prompt: opts.prompt, maxTokens, tier, attachment: opts.attachment });
+      await logAiUsage({
+        feature, model: c.model, provider: c.provider, tier, inputTokens: r.inputTokens, outputTokens: r.outputTokens,
+        costUsd: estimateCostUsd(c.model, r.inputTokens, r.outputTokens, cfg.prices), usedFallback: false, success: true, userId: opts.userId,
+      });
+      await maybeWarn(cfg.budget).catch(() => {});
+      if (!r.text) continue;
+      return { text: r.text, usedFallback: false, model: c.model, provider: c.provider, inputTokens: r.inputTokens, outputTokens: r.outputTokens };
+    } catch (err) {
+      console.error(`[ai] ${c.provider}/${c.model} failed:`, err instanceof Error ? err.message : err);
+      await recordAiError(err, c.provider);
+      await logAiUsage({ feature, model: c.model, provider: c.provider, tier, inputTokens: 0, outputTokens: 0, costUsd: 0, usedFallback: true, success: false, userId: opts.userId });
+    }
   }
+  return { ...(await fallbackResult()), text: opts.fallback() };
 }
 
 export interface ConnectionTestResult {
   ok: boolean;
+  provider: ProviderId;
   model: string;
   keySource: "db" | "env" | "none";
   message: string;
+  models?: string[];
   inputTokens?: number;
   outputTokens?: number;
 }
 
-/** Make a tiny real call to verify the configured key/model works. */
-export async function testAiConnection(userId?: string | null): Promise<ConnectionTestResult> {
+/** Make a tiny real call to verify a provider's key and model, and list the models the key can use. */
+export async function testAiConnection(provider: ProviderId = "anthropic", userId?: string | null, model?: string): Promise<ConnectionTestResult> {
   const cfg = await getAiConfig();
-  if (!cfg.apiKey) {
-    return {
-      ok: false,
-      model: cfg.model,
-      keySource: cfg.keySource,
-      message: "Chưa có API key (cả trong CSDL lẫn biến môi trường). Hãy nạp key trước.",
-    };
-  }
-
+  const k = cfg.keys[provider];
+  const useModel = model || (cfg.tiers.high.provider === provider ? cfg.tiers.high.model : cfg.tiers.economy.provider === provider ? cfg.tiers.economy.model : PROVIDERS[provider].defaults.economy);
+  if (!k.key) return { ok: false, provider, model: useModel, keySource: k.source, message: "Chưa có API key cho nhà cung cấp này." };
+  let models: string[] | undefined;
   try {
-    const { default: Anthropic } = await import("@anthropic-ai/sdk");
-    const client = new Anthropic({ apiKey: cfg.apiKey });
-    const msg = await client.messages.create({
-      model: cfg.model,
-      max_tokens: 16,
-      messages: [{ role: "user", content: "ping" }],
-    });
-    const inputTokens = msg.usage?.input_tokens ?? 0;
-    const outputTokens = msg.usage?.output_tokens ?? 0;
-    await logAiUsage({
-      feature: "connection_test",
-      model: cfg.model,
-      inputTokens,
-      outputTokens,
-      costUsd: estimateCostUsd(cfg.model, inputTokens, outputTokens),
-      usedFallback: false,
-      success: true,
-      userId,
-    });
-    return {
-      ok: true,
-      model: cfg.model,
-      keySource: cfg.keySource,
-      message: `Kết nối Claude thành công với model ${cfg.model}.`,
-      inputTokens,
-      outputTokens,
-    };
+    models = await listModels(provider, k.key);
+  } catch {
+    models = undefined;
+  }
+  if (!useModel) {
+    return { ok: Boolean(models), provider, model: "", keySource: k.source, models, message: models ? `Key hợp lệ: ${models.length} mô hình khả dụng. Chọn mô hình rồi kiểm tra lại.` : "Không liệt kê được mô hình – kiểm tra lại key." };
+  }
+  try {
+    const r = await callProvider({ provider, model: useModel, apiKey: k.key, prompt: "ping – trả lời 'ok'.", maxTokens: 16, tier: "economy" });
+    await logAiUsage({ feature: "connection_test", model: useModel, provider, inputTokens: r.inputTokens, outputTokens: r.outputTokens, costUsd: estimateCostUsd(useModel, r.inputTokens, r.outputTokens, cfg.prices), usedFallback: false, success: true, userId });
+    return { ok: true, provider, model: useModel, keySource: k.source, models, message: `Kết nối ${PROVIDERS[provider].label} thành công với mô hình ${useModel}.`, inputTokens: r.inputTokens, outputTokens: r.outputTokens };
   } catch (err) {
-    await logAiUsage({
-      feature: "connection_test",
-      model: cfg.model,
-      inputTokens: 0,
-      outputTokens: 0,
-      costUsd: 0,
-      usedFallback: true,
-      success: false,
-      userId,
-    });
-    const message = err instanceof Error ? err.message : String(err);
-    return { ok: false, model: cfg.model, keySource: cfg.keySource, message: `Lỗi kết nối: ${message}` };
+    await logAiUsage({ feature: "connection_test", model: useModel, provider, inputTokens: 0, outputTokens: 0, costUsd: 0, usedFallback: true, success: false, userId });
+    const message = err instanceof ProviderError || err instanceof Error ? err.message : String(err);
+    return { ok: false, provider, model: useModel, keySource: k.source, models, message: `Lỗi kết nối: ${message}` };
   }
 }

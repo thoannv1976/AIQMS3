@@ -8,21 +8,36 @@ export interface ModelPricing {
   output: number; // USD per 1,000,000 output tokens
 }
 
-// List prices (USD / 1M tokens). Matched by substring so new dated model ids keep working.
+// List prices (USD / 1M tokens) for Claude models (Anthropic first-party API, Nov 2026). Matched in order, so the
+// most specific id comes first. OpenAI / Gemini prices change often: admins enter them on the AI config page
+// (overrides win over this table). Unknown models are priced conservatively.
 const PRICING: Array<{ match: (m: string) => boolean; price: ModelPricing }> = [
+  { match: (m) => m.includes("fable-5-2") || m.includes("mythos-5-2"), price: { input: 8, output: 40 } },
+  { match: (m) => m.includes("fable") || m.includes("mythos"), price: { input: 10, output: 50 } },
+  { match: (m) => m.includes("opus-5-5"), price: { input: 4, output: 20 } },
+  { match: (m) => /opus-(5|4-[678])/.test(m), price: { input: 5, output: 25 } },
   { match: (m) => m.includes("opus"), price: { input: 15, output: 75 } },
+  { match: (m) => /sonnet-5/.test(m), price: { input: 2, output: 10 } },
   { match: (m) => m.includes("sonnet"), price: { input: 3, output: 15 } },
+  { match: (m) => m.includes("haiku-5-5"), price: { input: 0.1, output: 0.5 } },
+  { match: (m) => m.includes("haiku-4-5"), price: { input: 1, output: 5 } },
   { match: (m) => m.includes("haiku"), price: { input: 0.8, output: 4 } },
 ];
 
-const DEFAULT_PRICING: ModelPricing = { input: 15, output: 75 };
+/** Price used when a model is unknown and no override exists (deliberately high so budgets err on the safe side). */
+export const DEFAULT_PRICING: ModelPricing = { input: 5, output: 25 };
 
-export function pricingFor(model: string): ModelPricing {
-  return PRICING.find((p) => p.match(model))?.price ?? DEFAULT_PRICING;
+/** Built-in price for a model, or null when the model is not in the table. */
+export function builtinPricing(model: string): ModelPricing | null {
+  return PRICING.find((p) => p.match(model))?.price ?? null;
 }
 
-export function estimateCostUsd(model: string, inputTokens: number, outputTokens: number): number {
-  const p = pricingFor(model);
+export function pricingFor(model: string, overrides?: Record<string, ModelPricing>): ModelPricing {
+  return overrides?.[model] ?? builtinPricing(model) ?? DEFAULT_PRICING;
+}
+
+export function estimateCostUsd(model: string, inputTokens: number, outputTokens: number, overrides?: Record<string, ModelPricing>): number {
+  const p = pricingFor(model, overrides);
   return (inputTokens * p.input + outputTokens * p.output) / 1_000_000;
 }
 
@@ -75,6 +90,8 @@ export function featureLabel(feature: string): string {
 export interface AiUsageEntry {
   feature: string;
   model: string;
+  provider?: string | null;
+  tier?: string | null;
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
@@ -90,6 +107,8 @@ export async function logAiUsage(entry: AiUsageEntry): Promise<void> {
       data: {
         feature: entry.feature,
         model: entry.model,
+        provider: entry.provider ?? null,
+        tier: entry.tier ?? null,
         inputTokens: entry.inputTokens,
         outputTokens: entry.outputTokens,
         totalTokens: entry.inputTokens + entry.outputTokens,

@@ -7,6 +7,7 @@ import { saveFile, buildEvidencePath } from "../storage";
 import { processEvidenceDocument, markDocumentProcessing, markDocumentFailed } from "../ai/documents";
 import { findChecksumDuplicate } from "./duplicates";
 import { queueEvidenceCheck } from "./check";
+import { getAiConfig } from "../ai/config";
 import { EvidenceStatus, Confidentiality } from "@/generated/prisma/enums";
 
 export const ACCEPTED_EXTENSIONS = ".pdf,.docx,.xlsx,.xls,.pptx,.txt,.md,.csv,.png,.jpg,.jpeg,.webp";
@@ -46,7 +47,7 @@ export function scheduleProcessing(job: { evidenceId: string; programId: string;
     try {
       const { text } = await processEvidenceDocument(job);
       // AI quality check (relevance to criteria, outdated document) – never blocks the upload.
-      await queueEvidenceCheck(job.evidenceId, text);
+      if ((await getAiConfig()).autoEvidenceCheck) await queueEvidenceCheck(job.evidenceId, text);
     } catch (e) {
       console.error("[evidence] background processing failed:", e);
       await markDocumentFailed(job.evidenceId);

@@ -119,7 +119,7 @@ async function evidenceForSection(sectionId: string) {
   return { section, evidenceSummaries, linkedEvidenceCount, excluded, critIds, facts };
 }
 
-export async function draftSectionAction(sectionId: string): Promise<{ text: string; usedFallback: boolean; excluded?: string[] }> {
+export async function draftSectionAction(sectionId: string): Promise<{ text: string; usedFallback: boolean; excluded?: string[]; blockedReason?: string }> {
   const user = await requireUser();
   const ctx = await evidenceForSection(sectionId);
   if (!ctx) return { text: "Không tìm thấy mục báo cáo.", usedFallback: true };
@@ -144,7 +144,7 @@ export async function draftSectionAction(sectionId: string): Promise<{ text: str
     },
   });
   await logAudit({ userId: user.id, action: "AI_SAR_DRAFT", entityType: "ReportSection", entityId: sectionId });
-  return { text: res.text, usedFallback: res.usedFallback, excluded: ctx.excluded };
+  return { text: res.text, usedFallback: res.usedFallback, excluded: ctx.excluded, blockedReason: res.blockedReason };
 }
 
 export async function reviewSectionAction(sectionId: string): Promise<{ text: string; usedFallback: boolean }> {
@@ -498,7 +498,7 @@ export async function bulkAssignSectionsAction(
 export type BatchDraftOutcome =
   | { status: "done"; citations: number; needData: number; excluded: number }
   | { status: "skipped"; reason: string }
-  | { status: "error"; reason: string };
+  | { status: "error"; reason: string; stop?: boolean };
 
 /** Draft one section with AI and save it straight into the four fields (used by the whole-report runner). */
 export async function draftAndSaveSectionAction(
@@ -513,6 +513,7 @@ export async function draftAndSaveSectionAction(
     const hasText = [existing.content, existing.strengths, existing.weaknesses, existing.improvementPlan].some((x) => x && x.trim());
     if (hasText && !opts.overwrite) return { status: "skipped", reason: "Đã có nội dung" };
     const draft = await draftSectionAction(sectionId);
+    if (draft.blockedReason) return { status: "error", reason: draft.blockedReason, stop: true };
     if (draft.usedFallback) return { status: "error", reason: "AI chưa sẵn sàng (đang dùng bản dự phòng)" };
     const f = splitSarDraft(draft.text);
     const res = await saveSectionAction(sectionId, { ...f, status: opts.status });

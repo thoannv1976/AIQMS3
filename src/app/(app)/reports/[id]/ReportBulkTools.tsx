@@ -6,6 +6,17 @@ import { Users, Wand2, Square, Loader2, CheckCircle2, ChevronDown } from "lucide
 import { Button, Card, CardContent, Badge, Select, Label, Th, Td } from "@/components/ui";
 import { Progress } from "@/components/widgets";
 import { bulkAssignSectionsAction, draftAndSaveSectionAction, type BatchDraftOutcome } from "../actions";
+import { estimateAiCostAction, type CostEstimate } from "../../ai/actions";
+
+function confirmText(kind: string, n: number, e: CostEstimate): string {
+  if (e.aiOff) return `AI đang tắt hoặc chưa có khóa API – ${kind} sẽ dùng chế độ quy tắc. Tiếp tục?`;
+  const room = [e.remainingMonth != null ? `tháng còn $${e.remainingMonth.toFixed(2)}` : "", e.remainingDay != null ? `hôm nay còn $${e.remainingDay.toFixed(2)}` : ""].filter(Boolean).join(", ");
+  return `${kind}: ${n} mục × ≈$${e.perItem.toFixed(3)} ≈ $${e.total.toFixed(2)} (${e.provider} · ${e.model}).` +
+    (room ? `\nHạn mức: ${room}.` : "") +
+    (e.exceeds ? "\n⚠ Dự kiến vượt hạn mức – quá trình sẽ tự dừng khi chạm hạn mức." : "") +
+    "\n\nTiếp tục?";
+}
+
 
 interface Group {
   standardId: string;
@@ -102,6 +113,8 @@ function DraftPanel({ groups }: { groups: Group[] }) {
   const done = log.filter((r) => r.out?.status === "done") as Array<LogRow & { out: Extract<BatchDraftOutcome, { status: "done" }> }>;
 
   async function run() {
+    const est = await estimateAiCostAction("sar_draft", willRun);
+    if (!confirm(confirmText("AI soạn báo cáo", willRun, est))) return;
     stop.current = false;
     setRunning(true);
     const queue = targets.map((s) => ({ id: s.id, title: s.title }));
@@ -119,6 +132,7 @@ function DraftPanel({ groups }: { groups: Group[] }) {
           out = { status: "error", reason: "Mất kết nối – có thể chạy lại" };
         }
         update(item.id, out);
+        if (out.status === "error" && out.stop) stop.current = true; // spending limit reached
       }
     };
     await Promise.all([worker(), worker()]); // 2 sections at a time
