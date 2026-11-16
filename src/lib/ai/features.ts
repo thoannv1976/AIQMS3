@@ -84,7 +84,29 @@ export async function suggestCriteria(
         : "Chưa đủ dữ liệu văn bản để gợi ý tiêu chí. Hãy bổ sung mô tả hoặc tải lại tài liệu có nội dung trích xuất được.",
   });
 
-  return { ...result, data: ranked };
+  if (result.usedFallback) return { ...result, data: ranked };
+  // Rank the criteria the AI actually named first (in the order it named them), then
+  // fill up with the keyword ranking. Previously the AI answer was shown but ignored.
+  const aiPicks = criteriaNamedIn(result.text, criteria);
+  const picked = new Set(aiPicks.map((c) => c.id));
+  const data: CriterionSuggestion[] = [
+    ...aiPicks.map((c, i) => ({ id: c.id, code: c.code, title: c.title, score: Number((1 - i * 0.1).toFixed(2)) })),
+    ...ranked.filter((r) => !picked.has(r.id)),
+  ].slice(0, 5);
+  return { ...result, data };
+}
+
+/** Criteria whose code appears in `text`, ordered by first mention ("1.4" but not "MC-1.4.01" or "1.40"). */
+export function criteriaNamedIn(text: string, criteria: CriterionLite[]): CriterionLite[] {
+  const hits: Array<{ c: CriterionLite; at: number }> = [];
+  for (const c of criteria) {
+    const code = c.code.trim();
+    if (!code) continue;
+    const re = new RegExp(`(?<![\\w.\\-])${code.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?!\\.?\\d)`);
+    const m = re.exec(text);
+    if (m) hits.push({ c, at: m.index });
+  }
+  return hits.sort((a, b) => a.at - b.at).map((h) => h.c);
 }
 
 // ---------------------------------------------------------------------------

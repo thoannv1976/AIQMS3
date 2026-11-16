@@ -50,11 +50,29 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
   const validity = validityState(evidence.validUntil);
   const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
 
-  const allCriteria = evidence.cycle
-    ? evidence.cycle.standardSet.standards.flatMap((s) => s.criteria)
+  // Criteria of every standard set the program has a cycle for (latest cycle first), so
+  // evidence uploaded under one cycle can still be linked to a newer one (e.g. AUN-QA → TT04).
+  const programCycles = evidence.programId
+    ? await prisma.accreditationCycle.findMany({
+        where: { programId: evidence.programId },
+        orderBy: [{ year: "desc" }, { createdAt: "desc" }],
+        select: { standardSetId: true },
+      })
+    : [];
+  const setIds = [...new Set([...programCycles.map((c) => c.standardSetId), ...(evidence.cycle ? [evidence.cycle.standardSetId] : [])])];
+  const standardSets = setIds.length
+    ? await prisma.accreditationStandardSet.findMany({
+        where: { id: { in: setIds } },
+        include: { standards: { orderBy: { order: "asc" }, include: { criteria: { orderBy: { order: "asc" } } } } },
+      })
     : [];
   const linkedIds = new Set(evidence.criterionLinks.map((l) => l.criterionId));
-  const linkableCriteria = allCriteria.filter((c) => !linkedIds.has(c.id));
+  const criterionGroups = setIds
+    .map((sid) => standardSets.find((s) => s.id === sid))
+    .filter((s): s is (typeof standardSets)[number] => Boolean(s))
+    .map((s) => ({ id: s.id, name: s.name, criteria: s.standards.flatMap((st) => st.criteria).filter((c) => !linkedIds.has(c.id)) }))
+    .filter((g) => g.criteria.length > 0);
+  const linkableCriteria = criterionGroups.flatMap((g) => g.criteria);
 
   const programRoles = await programRolesOf(user.id, evidence.programId);
   const canApproveRole = canInProgram(user.role, programRoles, "evidence:approve");
@@ -299,6 +317,11 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
                   <div className="text-sm">
                     <span className="font-medium text-slate-800">{l.criterion.code}</span>{" "}
                     <span className="text-slate-600">{l.criterion.title}</span>
+                    {setIds.length > 1 && (
+                      <span className="ml-1 text-xs text-slate-400">
+                        ({standardSets.find((s) => s.id === l.criterion.standard.setId)?.code ?? "—"})
+                      </span>
+                    )}
                     {l.suggestedByAi && (
                       <Badge color="purple" className="ml-1">
                         AI
@@ -321,11 +344,21 @@ export default async function EvidenceDetailPage({ params }: { params: Promise<{
                     <option value="" disabled>
                       — Gắn tiêu chí —
                     </option>
-                    {linkableCriteria.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.code} — {c.title}
-                      </option>
-                    ))}
+                    {criterionGroups.length === 1
+                      ? criterionGroups[0].criteria.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.code} — {c.title}
+                          </option>
+                        ))
+                      : criterionGroups.map((g) => (
+                          <optgroup key={g.id} label={g.name}>
+                            {g.criteria.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.code} — {c.title}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
                   </Select>
                   <Button type="submit" size="sm" variant="outline">
                     Gắn

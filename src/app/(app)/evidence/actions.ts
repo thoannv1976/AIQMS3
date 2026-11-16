@@ -271,13 +271,14 @@ export async function suggestCriteriaAction(
   });
   if (!evidence) return { text: "Không tìm thấy minh chứng.", usedFallback: true, suggestions: [] };
 
+  // Suggest against the program's current (latest) cycle, like "AI phân loại" does; the
+  // cycle stamped on the evidence at upload time may be an older standard set.
   const cycle =
-    evidence.cycle ??
     (await prisma.accreditationCycle.findFirst({
       where: { programId: evidence.programId },
       orderBy: [{ year: "desc" }, { createdAt: "desc" }],
       include: { standardSet: { include: { standards: { include: { criteria: true } } } } },
-    }));
+    })) ?? evidence.cycle;
 
   const criteria = cycle ? cycle.standardSet.standards.flatMap((s) => s.criteria) : [];
   const text = evidence.document?.extractedText || evidence.description || evidence.title;
