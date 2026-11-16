@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity,
+  School,
   LayoutDashboard,
   GraduationCap,
   Target,
@@ -55,6 +56,7 @@ const ICONS: Record<string, LucideIcon> = {
   mywork: ListTodo,
   org: Building2,
   system: Activity,
+  classroom: School,
 };
 
 export function Sidebar({ groups }: { groups: NavGroup[] }) {

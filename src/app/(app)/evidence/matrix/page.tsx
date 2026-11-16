@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { FileSpreadsheet, AlertTriangle } from "lucide-react";
+import { FileSpreadsheet, AlertTriangle, ArrowLeftRight } from "lucide-react";
 import { requireUser } from "@/lib/auth";
-import { resolveProgram } from "@/lib/program-context";
+import { resolveProgram, programRolesOf } from "@/lib/program-context";
+import { canInProgram } from "@/lib/rbac";
 import { evidenceVisibilityWhere } from "@/lib/access";
 import { buildEvidenceMatrix } from "@/lib/evidence/matrix";
 import { ProgramSwitcher } from "@/components/program-switcher";
@@ -19,6 +20,7 @@ export default async function EvidenceMatrixPage({ searchParams }: { searchParam
   const sp = await searchParams;
   const { programs, selected } = await resolveProgram(sp.program);
   const data = selected ? await buildEvidenceMatrix(selected.id, await evidenceVisibilityWhere(user, selected.id)) : null;
+  const canWrite = selected ? canInProgram(user.role, await programRolesOf(user.id, selected.id), "evidence:write") : false;
 
   return (
     <div>
@@ -28,6 +30,14 @@ export default async function EvidenceMatrixPage({ searchParams }: { searchParam
         actions={
           <div className="flex items-center gap-2">
             <ProgramSwitcher programs={programs} selectedId={selected?.id} />
+            {selected && canWrite && (
+              <Link
+                href={`/evidence/crosswalk?program=${selected.id}`}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                <ArrowLeftRight className="h-4 w-4" /> Chuyển mã tiêu chuẩn
+              </Link>
+            )}
             {selected && data && (
               <a
                 href={`/evidence/matrix/export?program=${selected.id}`}

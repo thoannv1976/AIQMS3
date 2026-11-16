@@ -9,6 +9,7 @@ import { reportSectionStatus } from "@/lib/labels";
 import { saveSectionAction, draftSectionAction, reviewSectionAction, reviewSectionAdvancedAction, assignSectionAction } from "../actions";
 import type { AdvancedReviewResult } from "../actions";
 import { SectionTools } from "./SectionTools";
+import { CommentThread } from "@/components/CommentThread";
 import { Markdown } from "@/components/markdown";
 import { splitSarDraft } from "@/lib/sar/draft";
 import { ReportSectionStatus } from "@/generated/prisma/enums";
@@ -36,7 +37,7 @@ interface UserOption {
   fullName: string;
 }
 
-export function SectionEditor({ section, canWrite, users }: { section: SectionData; canWrite: boolean; users: UserOption[] }) {
+export function SectionEditor({ section, canWrite, users, currentUserId }: { section: SectionData; canWrite: boolean; users: UserOption[]; currentUserId?: string }) {
   const [open, setOpen] = useState(false);
   const [content, setContent] = useState(section.content ?? "");
   const [strengths, setStrengths] = useState(section.strengths ?? "");
@@ -252,6 +253,11 @@ export function SectionEditor({ section, canWrite, users }: { section: SectionDa
               >
                 <Save className="h-4 w-4" /> {saved ? "Đã lưu" : "Lưu"}
               </Button>
+            </div>
+          )}
+          {currentUserId && (
+            <div className="border-t border-slate-100 pt-3">
+              <CommentThread entityType="report_section" entityId={section.id} currentUserId={currentUserId} compact />
             </div>
           )}
         </div>

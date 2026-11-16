@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { logAudit } from "@/lib/audit";
-import { DegreeLevel, CycleStatus, ReportStatus } from "@/generated/prisma/enums";
+import { DegreeLevel, CycleStatus, ReportStatus, ReportSectionStatus } from "@/generated/prisma/enums";
 import type { Prisma } from "@/generated/prisma/client";
 
 export interface FormState {
@@ -179,4 +179,40 @@ export async function deleteCourseAction(courseId: string): Promise<void> {
   await logAudit({ userId: user.id, action: "DELETE", entityType: "Course", entityId: courseId, detail: { code: course.code } });
   revalidatePath(`/programs/${course.programId}`);
   revalidatePath("/outcomes");
+}
+
+/**
+ * Start the next accreditation cycle from an existing one: same standard set, a new report whose
+ * sections mirror the previous report. Optionally carries over the SAR text (as a starting draft)
+ * and the writer/reviewer assignments. Evidence belongs to the program, so it stays available.
+ */
+export async function cloneCycleAction(cycleId: string, formData: FormData): Promise<void> {
+  const user = await requireUser();
+  if (!can(user.role, "program:write") && !can(user.role, "report:write")) return;
+  const src = await prisma.accreditationCycle.findUnique({
+    where: { id: cycleId },
+    include: { standardSet: true, reports: { orderBy: { createdAt: "desc" }, take: 1, include: { sections: true } } },
+  });
+  if (!src) return;
+  const year = parseInt(fstr(formData, "year"), 10) || src.year + 1;
+  const name = fstr(formData, "name") || `${src.standardSet.name.split("—")[0].trim()} — ${year}`;
+  const copyText = formData.get("copyText") === "on";
+  const copyAssign = formData.get("copyAssign") === "on";
+  const cycle = await prisma.accreditationCycle.create({
+    data: { programId: src.programId, standardSetId: src.standardSetId, name, year, status: CycleStatus.PLANNING },
+  });
+  const rep = src.reports[0];
+  if (rep) {
+    const nr = await prisma.selfAssessmentReport.create({ data: { cycleId: cycle.id, title: rep.title.replace(/\b(19|20)\d{2}\b/g, String(year)) } });
+    await prisma.reportSection.createMany({
+      data: rep.sections.map((s) => ({
+        reportId: nr.id, standardId: s.standardId, criterionId: s.criterionId, title: s.title, order: s.order,
+        content: copyText ? s.content : null, strengths: copyText ? s.strengths : null, weaknesses: copyText ? s.weaknesses : null, improvementPlan: copyText ? s.improvementPlan : null,
+        status: copyText && s.content ? ReportSectionStatus.DRAFTING : ReportSectionStatus.NOT_STARTED,
+        assignedToId: copyAssign ? s.assignedToId : null, reviewerId: copyAssign ? s.reviewerId : null,
+      })),
+    });
+  }
+  await logAudit({ userId: user.id, action: "CLONE_CYCLE", entityType: "AccreditationCycle", entityId: cycle.id, detail: { from: cycleId, copyText, copyAssign } });
+  revalidatePath(`/programs/${src.programId}`);
 }

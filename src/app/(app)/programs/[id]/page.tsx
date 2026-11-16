@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { roleLabel, can } from "@/lib/rbac";
 import { AutoSubmitSelect, ConfirmButton } from "@/components/form-controls";
-import { createCycleAction, updateCycleStatusAction, createReportAction, createCourseAction, deleteCourseAction } from "../actions";
+import { createCycleAction, updateCycleStatusAction, createReportAction, createCourseAction, deleteCourseAction, cloneCycleAction } from "../actions";
 import { getProgramStats } from "@/lib/metrics";
 import { Card, CardContent, CardHeader, CardTitle, Badge, PageHeader, LinkButton, Th, Td, Input, Select, Button } from "@/components/ui";
 import { StatCard, DescItem } from "@/components/widgets";
@@ -241,6 +241,18 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
                       <FileText className="h-3.5 w-3.5" /> {r.title}
                     </Link>
                   ))}
+                  {canCycle && c.reports.length > 0 && (
+                    <details className="pt-1 text-xs">
+                      <summary className="cursor-pointer text-slate-500 hover:text-slate-700">Sao chép sang chu kỳ mới…</summary>
+                      <form action={cloneCycleAction.bind(null, c.id)} className="mt-2 flex flex-wrap items-center gap-2">
+                        <Input name="name" placeholder="Tên chu kỳ mới" className="h-8 w-64 text-xs" />
+                        <Input name="year" type="number" defaultValue={c.year + 1} className="h-8 w-24 text-xs" />
+                        <label className="flex items-center gap-1"><input type="checkbox" name="copyText" /> Giữ nội dung SAR làm bản nháp</label>
+                        <label className="flex items-center gap-1"><input type="checkbox" name="copyAssign" defaultChecked /> Giữ phân công</label>
+                        <Button type="submit" size="sm" variant="outline">Tạo chu kỳ mới</Button>
+                      </form>
+                    </details>
+                  )}
                   {canReport && c.reports.length === 0 && (
                     <form action={createReportAction.bind(null, c.id)} className="flex flex-wrap items-center gap-2 pt-1">
                       <Select name="granularity" defaultValue="criterion" className="h-8 w-auto text-xs">

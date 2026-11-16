@@ -21,7 +21,7 @@ export interface ProgramBenchmark {
 export async function getBenchmark(opts: { programIds?: string[] | null; facultyId?: string | null } = {}): Promise<ProgramBenchmark[]> {
   const programs = await prisma.program.findMany({
     where: {
-      ...(opts.programIds ? { id: { in: opts.programIds } } : {}),
+      ...(opts.programIds ? { id: { in: opts.programIds } } : { isSandbox: false }),
       ...(opts.facultyId ? { facultyId: opts.facultyId } : {}),
     },
     orderBy: { createdAt: "asc" },

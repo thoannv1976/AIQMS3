@@ -41,8 +41,9 @@ export interface ManagementOverview {
 }
 
 export async function getManagementOverview(opts: { programIds: string[] | null; facultyId?: string | null }): Promise<ManagementOverview> {
+  // Institution-wide views leave classroom sandboxes out; scoped users still see the ones assigned to them.
   const where = {
-    ...(opts.programIds ? { id: { in: opts.programIds } } : {}),
+    ...(opts.programIds ? { id: { in: opts.programIds } } : { isSandbox: false }),
     ...(opts.facultyId ? { facultyId: opts.facultyId } : {}),
   };
   const programs = await prisma.program.findMany({
