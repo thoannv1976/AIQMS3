@@ -4,7 +4,8 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { analyzeSurvey } from "@/lib/ai/features";
 import { logAudit } from "@/lib/audit";
-import { AiAnalysisType, QuestionType, SurveyAudience } from "@/generated/prisma/enums";
+import { AiAnalysisType, SurveyAudience } from "@/generated/prisma/enums";
+import { summarizeSurveyQuestions } from "@/lib/surveys/stats";
 
 const AUDIENCE_LABEL: Record<SurveyAudience, string> = {
   STUDENT: "Sinh viên",
@@ -18,28 +19,20 @@ export async function analyzeSurveyAction(surveyId: string): Promise<{ text: str
   const user = await requireUser();
   const survey = await prisma.survey.findUnique({
     where: { id: surveyId },
-    include: { questions: { include: { answers: true } } },
+    include: {
+      questions: { orderBy: { order: "asc" }, include: { answers: true } },
+      criterion: { select: { code: true } },
+      _count: { select: { responses: true } },
+    },
   });
   if (!survey) return { text: "Không tìm thấy khảo sát.", usedFallback: true };
-
-  const openAnswers: string[] = [];
-  let likertSum = 0;
-  let likertCount = 0;
-  for (const q of survey.questions) {
-    for (const a of q.answers) {
-      if (q.type === QuestionType.OPEN && a.valueText) openAnswers.push(a.valueText);
-      if (q.type === QuestionType.LIKERT && a.valueNumber != null) {
-        likertSum += a.valueNumber;
-        likertCount++;
-      }
-    }
-  }
 
   const res = await analyzeSurvey({
     title: survey.title,
     audience: AUDIENCE_LABEL[survey.audience],
-    openAnswers,
-    averageScore: likertCount ? likertSum / likertCount : null,
+    responses: survey._count.responses,
+    criterionCode: survey.criterion?.code ?? null,
+    ...summarizeSurveyQuestions(survey.questions),
   }, { userId: user.id });
 
   await prisma.aiAnalysisResult.create({

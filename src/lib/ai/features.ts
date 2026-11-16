@@ -203,29 +203,51 @@ KẾ HOẠCH CẢI TIẾN: ${input.improvementPlan ?? "(trống)"}`,
 export async function analyzeSurvey(input: {
   title: string;
   audience: string;
+  responses?: number;
+  criterionCode?: string | null;
   openAnswers: string[];
   averageScore?: number | null;
+  likert?: Array<{ text: string; n: number; avg: number; dist: number[]; agreePct: number }>;
+  choices?: Array<{ text: string; n: number; top: Array<[string, number]> }>;
 }, meta?: AiMeta): Promise<AiResult> {
   const answers = input.openAnswers.filter(Boolean);
+  const likert = input.likert ?? [];
+  const choices = input.choices ?? [];
+  // Lowest-scoring items first: these are what the QA team must act on.
+  const ranked = [...likert].sort((a, b) => a.avg - b.avg);
+  const likertBlock = likert.length
+    ? `Kết quả từng câu thang 1–5 (n = số người trả lời; phân bố mức 1/2/3/4/5; % đồng ý = mức 4–5):\n` +
+      likert.map((l, i) => `Câu ${i + 1}. ${l.text} — TB ${l.avg.toFixed(2)}/5, n=${l.n}, phân bố ${l.dist.join("/")}, đồng ý ${l.agreePct}%`).join("\n") + "\n"
+    : "";
+  const choiceBlock = choices.length
+    ? `Câu lựa chọn:\n${choices.map((c) => `- ${c.text} (n=${c.n}): ${c.top.map(([k, v]) => `${k} ${v}`).join("; ")}`).join("\n")}\n`
+    : "";
   return aiComplete({
     feature: "survey_analysis",
     userId: meta?.userId,
     system: SYSTEM_QA,
-    maxTokens: 900,
-    prompt: `Phân tích phản hồi khảo sát "${input.title}" (đối tượng: ${input.audience}).
-Hãy: (1) tóm tắt, (2) phân nhóm ý kiến theo chủ đề, (3) nêu vấn đề nổi bật được nhắc nhiều, (4) gợi ý hành động cải tiến và liên kết tới PLO/học phần nếu phù hợp.
-${input.averageScore != null ? `Điểm trung bình (thang Likert): ${input.averageScore.toFixed(2)}.\n` : ""}
+    maxTokens: 1400,
+    prompt: `Phân tích phản hồi khảo sát "${input.title}" (đối tượng: ${input.audience}${input.responses != null ? `; ${input.responses} phiếu` : ""}${input.criterionCode ? `; gắn tiêu chí ${input.criterionCode}` : ""}).
+Hãy: (1) tóm tắt kết quả chung, (2) chỉ ra các câu điểm thấp nhất / tỉ lệ đồng ý thấp (dưới 3,5/5 hoặc dưới 70% đồng ý) và các câu điểm cao nhất, kèm số liệu, (3) phân nhóm ý kiến mở theo chủ đề (nếu có), (4) gợi ý hành động cải tiến cụ thể cho các câu điểm thấp và liên kết tới PLO/học phần nếu phù hợp. Chỉ dùng số liệu được cung cấp.
+${input.averageScore != null ? `Điểm trung bình chung các câu thang 1–5: ${input.averageScore.toFixed(2)}.\n` : ""}${likertBlock}${choiceBlock}
 Các câu trả lời mở:\n${answers.map((a, i) => `${i + 1}. ${a}`).join("\n") || "(không có)"}`,
     fallback: () => {
-      if (!answers.length) return "Chưa có phản hồi mở để phân tích.";
-      const freq = new Map<string, number>();
-      for (const a of answers) for (const t of tokenize(a)) freq.set(t, (freq.get(t) || 0) + 1);
-      const top = [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
-      return (
-        `Tổng hợp ${answers.length} phản hồi (chưa bật AI).\n` +
-        `Từ khóa nổi bật: ${top.map(([w, c]) => `${w}(${c})`).join(", ")}.\n` +
-        `Gợi ý: rà soát các chủ đề lặp lại nhiều lần ở trên và đối chiếu với chuẩn đầu ra liên quan.`
-      );
+      const lines: string[] = [];
+      if (ranked.length) {
+        lines.push(`Kết quả ${ranked.length} câu thang 1–5 (chưa bật AI). Điểm thấp nhất:`);
+        ranked.slice(0, 3).forEach((l) => lines.push(`- ${l.text}: ${l.avg.toFixed(2)}/5, đồng ý ${l.agreePct}%`));
+        const best = ranked[ranked.length - 1];
+        lines.push(`Điểm cao nhất: ${best.text}: ${best.avg.toFixed(2)}/5.`);
+      }
+      if (answers.length) {
+        const freq = new Map<string, number>();
+        for (const a of answers) for (const t of tokenize(a)) freq.set(t, (freq.get(t) || 0) + 1);
+        const top = [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+        lines.push(`Tổng hợp ${answers.length} phản hồi mở. Từ khóa nổi bật: ${top.map(([w, c]) => `${w}(${c})`).join(", ")}.`);
+      }
+      if (!lines.length) return "Chưa có phản hồi để phân tích.";
+      lines.push("Gợi ý: ưu tiên cải tiến các câu điểm thấp và đối chiếu với chuẩn đầu ra liên quan.");
+      return lines.join("\n");
     },
   });
 }
