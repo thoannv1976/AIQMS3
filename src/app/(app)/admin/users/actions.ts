@@ -88,3 +88,15 @@ export async function toggleUserActiveAction(userId: string): Promise<void> {
   await logAudit({ userId: actor.id, action: "UPDATE", entityType: "User", entityId: userId, detail: { isActive: !u.isActive } });
   revalidatePath("/admin/users");
 }
+
+/** Admin sets a new password for another user (e.g. to replace the shared demo password). */
+export async function resetPasswordAction(userId: string, formData: FormData): Promise<void> {
+  const actor = await requireUser();
+  if (!can(actor.role, "admin:users")) return;
+  const password = String(formData.get("password") || "").trim();
+  if (password.length < 8) return;
+  await prisma.user.update({ where: { id: userId }, data: { passwordHash: await hashPassword(password) } });
+  await logAudit({ userId: actor.id, action: "RESET_PASSWORD", entityType: "User", entityId: userId });
+  await createNotification({ userId, title: "Mật khẩu của bạn đã được quản trị viên đặt lại", link: "/account" });
+  revalidatePath("/admin/users");
+}

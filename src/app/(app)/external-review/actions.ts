@@ -32,7 +32,7 @@ export async function createRecommendationAction(_prev: FormState, formData: For
 
   if (!programId || !content) return { error: "Vui lòng chọn chương trình và nhập nội dung khuyến nghị." };
 
-  const cycle = await prisma.accreditationCycle.findFirst({ where: { programId }, orderBy: { year: "desc" } });
+  const cycle = await prisma.accreditationCycle.findFirst({ where: { programId }, orderBy: [{ year: "desc" }, { createdAt: "desc" }] });
   if (!cycle) return { error: "Chương trình chưa có chu kỳ kiểm định để gắn khuyến nghị." };
 
   const rec = await prisma.recommendation.create({

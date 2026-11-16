@@ -245,7 +245,7 @@ const APPROVED: EvidenceStatus[] = [EvidenceStatus.APPROVED, EvidenceStatus.USED
 export async function getReadinessReport(programId: string): Promise<ReadinessReport | null> {
   const cycle = await prisma.accreditationCycle.findFirst({
     where: { programId },
-    orderBy: { year: "desc" },
+    orderBy: [{ year: "desc" }, { createdAt: "desc" }],
     include: {
       standardSet: {
         include: {

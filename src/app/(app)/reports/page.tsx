@@ -23,7 +23,7 @@ export default async function ReportsPage() {
       <PageHeader title="Báo cáo tự đánh giá (SAR)" description="Soạn thảo, rà soát và phê duyệt báo cáo tự đánh giá theo tiêu chuẩn" />
 
       {reports.length === 0 ? (
-        <EmptyState title="Chưa có báo cáo tự đánh giá" />
+        <EmptyState title="Chưa có báo cáo tự đánh giá" description="Tạo chu kỳ kiểm định tại trang chi tiết chương trình, rồi bấm “Tạo báo cáo tự đánh giá”." />
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {reports.map((r) => {

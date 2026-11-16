@@ -20,7 +20,15 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ i
     where: { id },
     include: {
       cycle: { include: { program: true } },
-      sections: { orderBy: { order: "asc" }, include: { criterion: true } },
+      sections: {
+        orderBy: { order: "asc" },
+        include: {
+          criterion: true,
+          standard: { include: { criteria: { select: { id: true } } } },
+          assignedTo: { select: { fullName: true } },
+          reviewer: { select: { fullName: true } },
+        },
+      },
     },
   });
   if (!report) notFound();
@@ -113,8 +121,17 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ i
               weaknesses: s.weaknesses,
               improvementPlan: s.improvementPlan,
               status: s.status,
-              linkedCount: s.criterionId ? countByCrit.get(s.criterionId) ?? 0 : 0,
+              linkedCount: s.standard
+                ? s.standard.criteria.reduce((a, c) => a + (countByCrit.get(c.id) ?? 0), 0)
+                : s.criterionId
+                  ? countByCrit.get(s.criterionId) ?? 0
+                  : 0,
+              assignedToId: s.assignedToId,
+              reviewerId: s.reviewerId,
+              assigneeName: s.assignedTo?.fullName ?? null,
+              reviewerName: s.reviewer?.fullName ?? null,
             }}
+            users={approverUsers.map((u) => ({ id: u.id, fullName: u.fullName }))}
           />
         ))}
       </div>

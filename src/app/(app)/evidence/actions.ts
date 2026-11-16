@@ -43,7 +43,7 @@ export async function uploadEvidence(_prev: FormState, formData: FormData): Prom
   const dup = await prisma.evidence.findUnique({ where: { programId_code: { programId, code } } });
   if (dup) return { error: `Mã minh chứng "${code}" đã tồn tại trong chương trình.` };
 
-  const cycle = await prisma.accreditationCycle.findFirst({ where: { programId }, orderBy: { year: "desc" } });
+  const cycle = await prisma.accreditationCycle.findFirst({ where: { programId }, orderBy: [{ year: "desc" }, { createdAt: "desc" }] });
 
   let storagePath: string | null = null;
   let checksum: string | null = null;
@@ -174,7 +174,7 @@ export async function suggestCriteriaAction(
     evidence.cycle ??
     (await prisma.accreditationCycle.findFirst({
       where: { programId: evidence.programId },
-      orderBy: { year: "desc" },
+      orderBy: [{ year: "desc" }, { createdAt: "desc" }],
       include: { standardSet: { include: { standards: { include: { criteria: true } } } } },
     }));
 

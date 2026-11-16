@@ -9,6 +9,7 @@ import bcrypt from "bcryptjs";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { embedText, chunkText } from "../src/lib/ai/embeddings";
+import { seedMoetStandardSets } from "./standards/seed-moet";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
@@ -699,6 +700,8 @@ async function main() {
     ],
   });
 
+  const moet = await seedMoetStandardSets(prisma);
+  console.log(`   + MOET standard sets: ${moet.standards} standards, ${moet.criteria} criteria (TT04/2025, TT20/2026).`);
   console.log(`✅ Done. ${users.length} users, 2 programs, ${courses.length} courses, ${allCriteria.length} criteria, ${evidenceDefs.length + ev2Defs.length} evidence.`);
   console.log("   Login: admin@aiqms.edu.vn / Aiqms@123");
 }

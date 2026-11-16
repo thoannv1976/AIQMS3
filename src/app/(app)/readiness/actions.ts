@@ -38,7 +38,7 @@ export async function criterionGapAnalysisAction(
         },
       },
     }),
-    prisma.accreditationCycle.findFirst({ where: { programId }, orderBy: { year: "desc" }, select: { id: true } }),
+    prisma.accreditationCycle.findFirst({ where: { programId }, orderBy: [{ year: "desc" }, { createdAt: "desc" }], select: { id: true } }),
   ]);
 
   const section = cycle
