@@ -8,6 +8,7 @@ import { StatCard } from "@/components/widgets";
 import { PdcaStatus } from "@/generated/prisma/enums";
 import { NewRecommendationForm } from "./NewRecommendationForm";
 import { RecommendationCard } from "./RecommendationCard";
+import { InterviewPanel } from "../reports/[id]/InterviewPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ export default async function ExternalReviewPage({ searchParams }: { searchParam
           standardSet: {
             include: { standards: { orderBy: { order: "asc" }, include: { criteria: { orderBy: { order: "asc" } } } } },
           },
+          reports: { select: { id: true }, orderBy: { createdAt: "desc" }, take: 1 },
           recommendations: {
             orderBy: { createdAt: "desc" },
             include: { criterion: { select: { code: true, title: true } } },
@@ -37,6 +39,10 @@ export default async function ExternalReviewPage({ searchParams }: { searchParam
   const recs = cycle?.recommendations ?? [];
   const responded = recs.filter((r) => r.respondedAt).length;
   const completed = recs.filter((r) => r.status === PdcaStatus.COMPLETED).length;
+  const reportId = cycle?.reports[0]?.id ?? null;
+  const latestInterview = reportId
+    ? await prisma.aiAnalysisResult.findFirst({ where: { type: "INTERVIEW_QUESTIONS", targetType: "report", targetId: reportId }, orderBy: { createdAt: "desc" } })
+    : null;
 
   return (
     <div>
@@ -57,6 +63,13 @@ export default async function ExternalReviewPage({ searchParams }: { searchParam
             <StatCard label="Đã giải trình" value={`${responded}/${recs.length}`} accent={responded === recs.length && recs.length > 0 ? "green" : "amber"} />
             <StatCard label="Đã khắc phục xong" value={`${completed}/${recs.length}`} accent="green" />
           </div>
+          {reportId && (
+            <InterviewPanel
+              reportId={reportId}
+              canUseAi={can(user.role, "ai:use")}
+              latest={latestInterview?.result ? { text: latestInterview.result, createdAt: latestInterview.createdAt.toISOString() } : null}
+            />
+          )}
 
           {canWrite && (
             <Card>

@@ -1,6 +1,7 @@
 // Builds a self-contained, print-ready HTML document for a Self-Assessment Report (SAR).
 // Served either as a Word document (application/msword) or as a printable page → Save as PDF.
 // No heavy dependency — Word and browsers both render this HTML reliably.
+import { mdToHtml } from "./mdHtml";
 
 export interface SarExportSection {
   code?: string | null;
@@ -31,15 +32,10 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** Render multi-line user text as escaped HTML paragraphs. */
+/** Render section text (plain or Markdown from AI drafts: headings, bold, lists) as escaped HTML. */
 function paragraphs(text?: string | null): string {
   if (!text || !text.trim()) return `<p class="muted">—</p>`;
-  return text
-    .split(/\n{1,}/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => `<p>${esc(line)}</p>`)
-    .join("");
+  return mdToHtml(text).replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, "$1<i>$2</i>");
 }
 
 function block(label: string, text?: string | null): string {

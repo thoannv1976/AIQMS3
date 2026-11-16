@@ -11,6 +11,8 @@ import { Card, CardContent, CardHeader, CardTitle, Badge, PageHeader, LinkButton
 import { StatCard, DescItem } from "@/components/widgets";
 import { degreeLevel, programVersionStatus, cycleStatus } from "@/lib/labels";
 import { formatDate } from "@/lib/utils";
+import { canAccessProgram } from "@/lib/access";
+import { setProgramFacultyAction } from "../../admin/org/actions";
 
 export default async function ProgramDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -33,7 +35,7 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
       },
     },
   });
-  if (!program) notFound();
+  if (!program || !(await canAccessProgram(user, program.id))) notFound();
 
   const [stats, teamRoles, standardSets] = await Promise.all([
     getProgramStats(program.id),
@@ -44,6 +46,8 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
     }),
     prisma.accreditationStandardSet.findMany({ orderBy: { createdAt: "asc" }, select: { id: true, code: true, name: true } }),
   ]);
+  const canOrg = can(user.role, "admin:users");
+  const allFaculties = canOrg ? await prisma.faculty.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }) : [];
   const thisYear = new Date().getFullYear();
 
   return (
@@ -77,6 +81,21 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
           </CardHeader>
           <CardContent>
             <dl className="divide-y divide-slate-100">
+              <DescItem label="Khoa / viện quản lý">
+                {canOrg ? (
+                  <form action={setProgramFacultyAction.bind(null, program.id)}>
+                    <AutoSubmitSelect name="facultyId" defaultValue={program.facultyId}>
+                      {allFaculties.map((f) => (
+                        <option key={f.id} value={f.id}>
+                          {f.name}
+                        </option>
+                      ))}
+                    </AutoSubmitSelect>
+                  </form>
+                ) : (
+                  program.faculty.name
+                )}
+              </DescItem>
               <DescItem label="Mục tiêu đào tạo">{program.objectives ?? "—"}</DescItem>
               <DescItem label="Mô tả">{program.description ?? "—"}</DescItem>
             </dl>

@@ -1,15 +1,27 @@
 import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+import { allowedProgramIds } from "@/lib/access";
 import { getBenchmark } from "@/lib/quality/benchmark";
 import { aunRating } from "@/lib/quality/scoring";
-import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState, PageHeader, Td, Th } from "@/components/ui";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, PageHeader, Select, Td, Th } from "@/components/ui";
 import { StatCard, Progress } from "@/components/widgets";
 import { BarChartCard } from "@/components/charts";
 
 export const dynamic = "force-dynamic";
 
-export default async function BenchmarkPage() {
-  await requireUser();
-  const rows = await getBenchmark();
+export default async function BenchmarkPage({ searchParams }: { searchParams: Promise<{ faculty?: string }> }) {
+  const user = await requireUser();
+  const sp = await searchParams;
+  const scope = await allowedProgramIds(user);
+  const facultyId = sp.faculty || null;
+  const [rows, faculties] = await Promise.all([
+    getBenchmark({ programIds: scope, facultyId }),
+    prisma.faculty.findMany({
+      where: scope ? { programs: { some: { id: { in: scope } } } } : { programs: { some: {} } },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+  ]);
 
   if (rows.length === 0) return <EmptyState title="Chưa có chương trình" />;
 
@@ -22,6 +34,23 @@ export default async function BenchmarkPage() {
       <PageHeader
         title="So sánh chương trình (Benchmark)"
         description="Đối sánh mức sẵn sàng kiểm định, đạt chuẩn đầu ra và độ mạnh minh chứng giữa các chương trình đào tạo."
+        actions={
+          faculties.length > 1 ? (
+            <form className="flex items-center gap-2" action="/benchmark">
+              <Select name="faculty" defaultValue={facultyId ?? ""} className="w-auto">
+                <option value="">Toàn trường</option>
+                {faculties.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+              </Select>
+              <Button type="submit" size="sm" variant="outline">
+                Lọc
+              </Button>
+            </form>
+          ) : undefined
+        }
       />
 
       <div className="space-y-6">

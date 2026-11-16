@@ -56,6 +56,11 @@ export default async function AdminUsersPage() {
                         </Td>
                         <Td>
                           <Badge color={u.isActive ? "green" : "red"}>{u.isActive ? "Hoạt động" : "Đã khóa"}</Badge>
+                          {u.expiresAt && (
+                            <div className={`mt-0.5 text-[11px] ${u.expiresAt < new Date() ? "text-red-600" : "text-slate-500"}`}>
+                              {u.expiresAt < new Date() ? "Hết hạn" : "Hạn đến"} {formatDate(u.expiresAt)}
+                            </div>
+                          )}
                         </Td>
                         <Td className="text-xs text-slate-400">{formatDate(u.createdAt)}</Td>
                         <Td>

@@ -20,6 +20,7 @@ export const NAV_GROUPS: NavGroup[] = [
     titleEn: "Overview",
     items: [
       { href: "/dashboard", label: "Bảng điều khiển", labelEn: "Dashboard", icon: "dashboard", capability: "dashboard:view" },
+      { href: "/my-work", label: "Việc của tôi", labelEn: "My Work", icon: "mywork", capability: "task:view" },
       { href: "/ai-assistant", label: "Trợ lý AI", labelEn: "AI Assistant", icon: "ai", capability: "ai:use" },
     ],
   },
@@ -68,6 +69,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/approvals", label: "Phê duyệt", labelEn: "Approvals", icon: "approval", capability: "report:view" },
       { href: "/audit", label: "Nhật ký hệ thống", labelEn: "Audit Log", icon: "audit", capability: "audit:view" },
       { href: "/admin/users", label: "Quản trị người dùng", labelEn: "User Management", icon: "admin", capability: "admin:users" },
+      { href: "/admin/org", label: "Tổ chức (khoa, bộ môn)", labelEn: "Organisation", icon: "org", capability: "admin:users" },
       { href: "/admin/ai-config", label: "Cấu hình AI", labelEn: "AI Configuration", icon: "aiconfig", capability: "admin:settings" },
     ],
   },

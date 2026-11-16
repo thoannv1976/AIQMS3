@@ -22,6 +22,10 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
     return { error: "Tài khoản không tồn tại hoặc đã bị khóa." };
   }
 
+  if (user.expiresAt && user.expiresAt.getTime() < Date.now()) {
+    return { error: "Tài khoản đã hết hạn sử dụng. Vui lòng liên hệ quản trị hệ thống." };
+  }
+
   const ok = await verifyPassword(password, user.passwordHash);
   if (!ok) {
     return { error: "Email hoặc mật khẩu không đúng." };

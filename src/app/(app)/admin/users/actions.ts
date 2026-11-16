@@ -24,6 +24,9 @@ export async function createUser(_prev: FormState, formData: FormData): Promise<
   const role = String(formData.get("role") || "LECTURER") as Role;
   const title = String(formData.get("title") || "").trim() || null;
   const password = String(formData.get("password") || "").trim() || "Aiqms@123";
+  const expiresRaw = String(formData.get("expiresAt") || "").trim();
+  const expiresAt = expiresRaw ? new Date(`${expiresRaw}T23:59:59`) : null;
+  if (role === "EXTERNAL_REVIEWER" && !expiresAt) return { error: "Tài khoản đánh giá viên ngoài cần có ngày hết hạn." };
 
   if (!email || !email.includes("@") || !fullName) return { error: "Vui lòng nhập email và họ tên hợp lệ." };
 
@@ -31,7 +34,7 @@ export async function createUser(_prev: FormState, formData: FormData): Promise<
   if (existing) return { error: "Email đã tồn tại." };
 
   const passwordHash = await hashPassword(password);
-  const created = await prisma.user.create({ data: { email, fullName, role, title, unit: title, passwordHash } });
+  const created = await prisma.user.create({ data: { email, fullName, role, title, unit: title, passwordHash, expiresAt } });
   await logAudit({ userId: actor.id, action: "CREATE", entityType: "User", entityId: created.id, detail: { email, role } });
   revalidatePath("/admin/users");
   return { ok: true };

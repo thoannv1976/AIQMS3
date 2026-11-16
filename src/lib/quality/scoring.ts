@@ -24,6 +24,7 @@ export interface EvidenceForScore {
   isMachineReadable: boolean; // text was extracted (chunks exist)
   hasSummary: boolean; // AI/processed summary present
   criterionLinkCount: number;
+  expired?: boolean; // validUntil has passed
 }
 
 const STATUS_POINTS: Record<EvidenceStatus, number> = {
@@ -51,6 +52,10 @@ export function evidenceStrength(e: EvidenceForScore): { score: number; band: Sc
   if (e.hasSummary) score += 10;
 
   score += STATUS_POINTS[e.status] ?? 6;
+  if (e.expired) {
+    score -= 25;
+    reasons.unshift("Minh chứng đã hết hiệu lực — cần cập nhật bản mới.");
+  }
   if (e.status === EvidenceStatus.NEEDS_REVISION) reasons.push("Minh chứng đang cần bổ sung/chỉnh sửa.");
   if (e.status !== EvidenceStatus.APPROVED && e.status !== EvidenceStatus.USED_IN_REPORT)
     reasons.push("Minh chứng chưa được phê duyệt.");
@@ -274,6 +279,7 @@ export async function getReadinessReport(programId: string): Promise<ReadinessRe
             title: true,
             status: true,
             storagePath: true,
+            validUntil: true,
             criterionLinks: { select: { id: true } },
             document: { select: { summary: true, _count: { select: { chunks: true } } } },
           },
@@ -313,6 +319,7 @@ export async function getReadinessReport(programId: string): Promise<ReadinessRe
           isMachineReadable: (ev.document?._count.chunks ?? 0) > 0,
           hasSummary: Boolean(ev.document?.summary),
           criterionLinkCount: ev.criterionLinks.length,
+          expired: Boolean(ev.validUntil && ev.validUntil.getTime() < Date.now()),
         });
         evidenceBands[s.band] += 1;
         evidenceBands.total += 1;

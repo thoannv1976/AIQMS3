@@ -1,3 +1,4 @@
+import { Confidentiality, EvidenceStatus } from "@/generated/prisma/enums";
 import { prisma } from "../db";
 import { aiComplete, type AiResult, type AiMeta } from "./client";
 import { cosineSimilarity, embedText, tokenize } from "./embeddings";
@@ -83,7 +84,29 @@ export async function suggestCriteria(
         : "Chưa đủ dữ liệu văn bản để gợi ý tiêu chí. Hãy bổ sung mô tả hoặc tải lại tài liệu có nội dung trích xuất được.",
   });
 
-  return { ...result, data: ranked };
+  if (result.usedFallback) return { ...result, data: ranked };
+  // Rank the criteria the AI actually named first (in the order it named them), then
+  // fill up with the keyword ranking. Previously the AI answer was shown but ignored.
+  const aiPicks = criteriaNamedIn(result.text, criteria);
+  const picked = new Set(aiPicks.map((c) => c.id));
+  const data: CriterionSuggestion[] = [
+    ...aiPicks.map((c, i) => ({ id: c.id, code: c.code, title: c.title, score: Number((1 - i * 0.1).toFixed(2)) })),
+    ...ranked.filter((r) => !picked.has(r.id)),
+  ].slice(0, 5);
+  return { ...result, data };
+}
+
+/** Criteria whose code appears in `text`, ordered by first mention ("1.4" but not "MC-1.4.01" or "1.40"). */
+export function criteriaNamedIn(text: string, criteria: CriterionLite[]): CriterionLite[] {
+  const hits: Array<{ c: CriterionLite; at: number }> = [];
+  for (const c of criteria) {
+    const code = c.code.trim();
+    if (!code) continue;
+    const re = new RegExp(`(?<![\\w.\\-])${code.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?!\\.?\\d)`);
+    const m = re.exec(text);
+    if (m) hits.push({ c, at: m.index });
+  }
+  return hits.sort((a, b) => a.at - b.at).map((h) => h.c);
 }
 
 // ---------------------------------------------------------------------------
@@ -96,17 +119,26 @@ export async function draftReportSection(input: {
   notes?: string;
 }, meta?: AiMeta): Promise<AiResult> {
   const evidence = input.evidenceSummaries.length
-    ? input.evidenceSummaries.map((e, i) => `[MC${i + 1}] ${e}`).join("\n")
+    ? input.evidenceSummaries.map((e) => `- ${e}`).join("\n")
     : "(Chưa có minh chứng được liên kết.)";
 
   return aiComplete({
     feature: "sar_draft",
     userId: meta?.userId,
     system: SYSTEM_QA,
-    maxTokens: 1500,
+    maxTokens: 4000,
     prompt: `Soạn bản nháp nội dung báo cáo tự đánh giá cho tiêu chí ${input.criterionCode ?? ""} "${input.criterionTitle}".
-Cấu trúc gồm: (1) Mô tả hiện trạng, (2) Phân tích dựa trên minh chứng, (3) Điểm mạnh, (4) Tồn tại, (5) Kế hoạch cải tiến.
+Trình bày bằng Markdown với ĐÚNG 5 tiêu đề cấp 3 theo thứ tự sau (không thêm tiêu đề cấp 1 hoặc cấp 2):
+### Mô tả hiện trạng
+### Phân tích dựa trên minh chứng
+### Điểm mạnh
+### Tồn tại
+### Kế hoạch cải tiến
+Yêu cầu: tổng cộng khoảng 500–800 từ; mỗi nhận định có số liệu hoặc khẳng định phải kèm mã minh chứng trong ngoặc vuông, đúng mã như danh sách (ví dụ [MC-1.1.01]); không bịa mã.
+Điểm mạnh và Tồn tại viết dạng gạch đầu dòng; Kế hoạch cải tiến nêu hành động, đơn vị thực hiện, thời hạn.
+Hôm nay là ${new Date().toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}: mọi thời hạn trong Kế hoạch cải tiến phải sau ngày này.
 Chỉ sử dụng thông tin từ minh chứng dưới đây; nếu thiếu dữ liệu định lượng thì ghi rõ "cần bổ sung số liệu".
+Không thêm câu lưu ý/miễn trừ kiểu "đây là bản nháp do AI…" vào cuối bài (giao diện đã ghi rõ đây là bản nháp AI).
 ${input.notes ? `Ghi chú: ${input.notes}\n` : ""}
 Minh chứng:\n${evidence}`,
     fallback: () =>
@@ -228,13 +260,36 @@ export interface RetrievedChunk {
   score: number;
 }
 
-export async function ragRetrieve(programId: string, question: string, k = 5): Promise<RetrievedChunk[]> {
+/** Access filter applied to RAG retrieval (confidentiality + evidence status). */
+export interface RagAccess {
+  confidentiality?: Confidentiality[];
+  statuses?: EvidenceStatus[];
+}
+
+export async function ragRetrieve(programId: string, question: string, k = 5, access?: RagAccess): Promise<RetrievedChunk[]> {
   const qv = embedText(question);
+  const restricted = Boolean(access?.confidentiality || access?.statuses);
 
   // Fast path: vector search in Postgres (pgvector) — scales to very large corpora.
   if (pgVectorEnabled()) {
     try {
-      const hits = await searchSimilar(programId, qv, k);
+      let hits = await searchSimilar(programId, qv, restricted ? k * 4 : k);
+      if (restricted) {
+        const ids = [...new Set(hits.map((h) => h.evidenceId).filter((x): x is string => Boolean(x)))];
+        const ok = new Set(
+          (
+            await prisma.evidence.findMany({
+              where: {
+                id: { in: ids },
+                ...(access?.confidentiality ? { confidentiality: { in: access.confidentiality } } : {}),
+                ...(access?.statuses ? { status: { in: access.statuses } } : {}),
+              },
+              select: { id: true },
+            })
+          ).map((e) => e.id),
+        );
+        hits = hits.filter((h) => h.evidenceId && ok.has(h.evidenceId)).slice(0, k);
+      }
       const filtered = hits.filter((c) => c.score > 0.02);
       if (filtered.length) return filtered;
       // Empty (e.g. vectors not backfilled yet) → fall through to the in-app path.
@@ -245,7 +300,19 @@ export async function ragRetrieve(programId: string, question: string, k = 5): P
 
   // Fallback: in-app cosine over the Float[] embeddings (works without pgvector).
   const chunks = await prisma.documentChunk.findMany({
-    where: { document: { programId } },
+    where: {
+      document: {
+        programId,
+        ...(restricted
+          ? {
+              evidence: {
+                ...(access?.confidentiality ? { confidentiality: { in: access.confidentiality } } : {}),
+                ...(access?.statuses ? { status: { in: access.statuses } } : {}),
+              },
+            }
+          : {}),
+      },
+    },
     select: {
       content: true,
       embedding: true,
@@ -270,10 +337,22 @@ export async function ragAnswer(
   programId: string,
   question: string,
   meta?: AiMeta,
+  access?: RagAccess,
 ): Promise<AiResult & { citations: RetrievedChunk[] }> {
-  const top = await ragRetrieve(programId, question, 5);
+  // Retrieve more chunks, then group by evidence so each source is cited once.
+  const raw = await ragRetrieve(programId, question, 10, access);
+  const groups: RetrievedChunk[] = [];
+  for (const c of raw) {
+    const g = groups.find((x) => x.evidenceId && x.evidenceId === c.evidenceId);
+    if (g) {
+      if (g.content.length < 1400) g.content += `\n…\n${c.content}`;
+    } else if (groups.length < 5) {
+      groups.push({ ...c });
+    }
+  }
+  const top = groups;
   const context = top
-    .map((c, i) => `[${i + 1}] (Minh chứng ${c.evidenceCode ?? "?"}: ${c.evidenceTitle ?? "?"})\n${truncate(c.content, 800)}`)
+    .map((c, i) => `[${i + 1}] (Minh chứng ${c.evidenceCode ?? "?"}: ${c.evidenceTitle ?? "?"})\n${truncate(c.content, 1400)}`)
     .join("\n\n");
 
   const result = await aiComplete({
@@ -485,5 +564,68 @@ Cấu trúc giải trình: (1) tiếp thu/làm rõ khuyến nghị; (2) hiện t
       `2. Hiện trạng: cần rà soát và bổ sung minh chứng liên quan.\n` +
       `3. Hành động khắc phục: xây dựng kế hoạch cải tiến PDCA, phân công đơn vị phụ trách.\n` +
       `4. Mốc thời gian: hoàn thành trong học kỳ tới; bổ sung minh chứng sau cải tiến.`,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 14. Suggested interview questions for the external review panel
+// ---------------------------------------------------------------------------
+export async function suggestInterviewQuestions(
+  input: {
+    programName: string;
+    standardSet: string;
+    sections: Array<{ title: string; weaknesses?: string | null; content?: string | null; evidenceCount: number }>;
+  },
+  meta?: AiMeta,
+): Promise<AiResult> {
+  const sectionText = input.sections
+    .map(
+      (s) =>
+        `- ${s.title} | minh chứng: ${s.evidenceCount}` +
+        (s.weaknesses ? ` | tồn tại: ${truncate(s.weaknesses, 200)}` : "") +
+        (s.content ? ` | hiện trạng: ${truncate(s.content, 220)}` : " | (chưa viết)"),
+    )
+    .join("\n");
+  return aiComplete({
+    feature: "interview_questions",
+    userId: meta?.userId,
+    system: SYSTEM_QA,
+    maxTokens: 2500,
+    prompt: `Chương trình: ${input.programName}. Bộ tiêu chuẩn: ${input.standardSet}.
+Dưới đây là tóm tắt báo cáo tự đánh giá theo từng mục (kèm số minh chứng và tồn tại):
+${sectionText}
+
+Hãy đóng vai đoàn đánh giá ngoài và soạn BỘ CÂU HỎI PHỎNG VẤN dự kiến, ưu tiên các mục có tồn tại, ít minh chứng hoặc chưa viết.
+Nhóm theo đối tượng: (1) Lãnh đạo nhà trường/khoa; (2) Giảng viên; (3) Người học; (4) Cựu người học; (5) Nhà tuyển dụng/đối tác; (6) Cán bộ hỗ trợ.
+Mỗi nhóm 4–6 câu; mỗi câu ghi tiêu chí liên quan trong ngoặc và "Minh chứng nên chuẩn bị: …".
+Kết thúc bằng 3–5 lưu ý chuẩn bị cho đơn vị. Định dạng Markdown, tiếng Việt.`,
+    fallback: () =>
+      `# Bộ câu hỏi phỏng vấn dự kiến (bản quy tắc — chưa bật AI)\n\n` +
+      input.sections
+        .filter((s) => s.weaknesses || s.evidenceCount === 0 || !s.content)
+        .slice(0, 12)
+        .map((s) => `- (${s.title}) Đơn vị đã thực hiện nội dung này như thế nào? Minh chứng nào thể hiện? Minh chứng nên chuẩn bị: các văn bản, số liệu liên quan.`)
+        .join("\n"),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 15. Leadership brief for the quality dashboard
+// ---------------------------------------------------------------------------
+export async function leadershipBrief(metricsText: string, meta?: AiMeta): Promise<AiResult> {
+  return aiComplete({
+    feature: "leadership_brief",
+    userId: meta?.userId,
+    system: SYSTEM_QA,
+    maxTokens: 1500,
+    prompt: `Số liệu quản trị chất lượng hiện tại:
+${metricsText}
+
+Viết NHẬN ĐỊNH CHO LÃNH ĐẠO (Markdown, tiếng Việt, tối đa ~350 từ):
+1. Bức tranh chung (2–3 câu, nêu số liệu).
+2. Xu hướng/điểm đáng chú ý (so sánh giữa các chương trình/khoa, hoạt động 30 ngày gần đây).
+3. 3–5 việc ưu tiên cụ thể (ai làm, làm gì, vì sao) — ưu tiên tiêu chí điều kiện, minh chứng hết hiệu lực, việc quá hạn.
+Chỉ dựa trên số liệu được cung cấp, không bịa số liệu.`,
+    fallback: () => `**Nhận định (bản quy tắc — chưa bật AI)**\n\n${metricsText}`,
   });
 }

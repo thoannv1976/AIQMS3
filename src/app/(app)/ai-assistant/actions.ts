@@ -5,6 +5,8 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { ragAnswer, type RetrievedChunk } from "@/lib/ai/features";
 import { logAudit } from "@/lib/audit";
+import { can } from "@/lib/rbac";
+import { allowedConfidentiality, canAccessProgram } from "@/lib/access";
 
 export interface AskResult {
   text: string;
@@ -20,7 +22,11 @@ export async function askAction(programId: string, question: string, sessionId?:
     return { text: "Vui lòng chọn chương trình và nhập câu hỏi.", usedFallback: true, citations: [], sessionId: sessionId ?? "" };
   }
 
-  const res = await ragAnswer(programId, q, { userId: user.id });
+  if (!can(user.role, "ai:use") || !(await canAccessProgram(user, programId))) {
+    return { text: "Bạn không có quyền dùng trợ lý AI cho chương trình này.", usedFallback: true, citations: [], sessionId: sessionId ?? "" };
+  }
+  // Only retrieve evidence the user may read (confidentiality by role / program assignment).
+  const res = await ragAnswer(programId, q, { userId: user.id }, { confidentiality: await allowedConfidentiality(user, programId) });
 
   // Persist the conversation (create the session on the first question).
   let sid = sessionId;

@@ -6,7 +6,11 @@ import { resolveProgram } from "@/lib/program-context";
 import { Card, CardContent, CardHeader, CardTitle, PageHeader } from "@/components/ui";
 import { ImprovementForm } from "./ImprovementForm";
 
-export default async function NewImprovementPage({ searchParams }: { searchParams: Promise<{ program?: string }> }) {
+export default async function NewImprovementPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ program?: string; problem?: string; action?: string; source?: string; criterion?: string }>;
+}) {
   const user = await requireUser();
   if (!can(user.role, "improvement:write")) redirect("/improvements");
   const sp = await searchParams;
@@ -28,7 +32,11 @@ export default async function NewImprovementPage({ searchParams }: { searchParam
           <CardTitle>Thông tin cải tiến (PDCA)</CardTitle>
         </CardHeader>
         <CardContent>
-          <ImprovementForm programId={selected.id} criteria={criteria} />
+          <ImprovementForm
+            programId={selected.id}
+            criteria={criteria}
+            defaults={{ problem: sp.problem, action: sp.action, source: sp.source, criterionId: sp.criterion }}
+          />
         </CardContent>
       </Card>
     </div>

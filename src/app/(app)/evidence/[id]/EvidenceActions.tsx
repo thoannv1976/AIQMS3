@@ -11,6 +11,7 @@ import {
   setEvidenceStatusAction,
 } from "../actions";
 import { EvidenceStatus } from "@/generated/prisma/enums";
+import { Markdown } from "@/components/markdown";
 
 interface Suggestion {
   id: string;
@@ -71,7 +72,7 @@ export function AiPanel({ evidenceId, canWrite }: { evidenceId: string; canWrite
           <div className="mb-1 flex items-center gap-2 text-xs font-medium text-slate-500">
             Tóm tắt {summary.usedFallback && <Badge color="amber">chế độ dự phòng</Badge>}
           </div>
-          <p className="prose-ai text-slate-700">{summary.text}</p>
+          <Markdown text={summary.text ?? ""} />
         </div>
       )}
 

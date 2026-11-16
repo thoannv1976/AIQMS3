@@ -7,6 +7,7 @@ import { taskPriority, pdcaStatus } from "@/lib/labels";
 import { formatDate } from "@/lib/utils";
 import { respondRecommendationAction, draftResponseAction } from "./actions";
 import { PdcaStatus, TaskPriority } from "@/generated/prisma/enums";
+import { Markdown } from "@/components/markdown";
 
 export interface RecommendationDto {
   id: string;
@@ -91,7 +92,7 @@ export function RecommendationCard({ rec, canWrite }: { rec: RecommendationDto; 
           rec.response && (
             <div className="border-t border-slate-100 pt-3">
               <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Giải trình của đơn vị</div>
-              <p className="prose-ai whitespace-pre-wrap text-sm text-slate-700">{rec.response}</p>
+              <Markdown text={rec.response ?? ""} />
             </div>
           )
         )}

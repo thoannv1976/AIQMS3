@@ -10,6 +10,7 @@ import { ConfirmButton } from "@/components/form-controls";
 import { DescItem } from "@/components/widgets";
 import { syllabusStatus, contributionLevel, cloPloStrength } from "@/lib/labels";
 import { SyllabusReviewPanel } from "./SyllabusReviewPanel";
+import { canAccessProgram } from "@/lib/access";
 import {
   createCloAction,
   updateCloAction,
@@ -39,7 +40,7 @@ export default async function SyllabusDetailPage({
       curriculumMaps: { include: { plo: true } },
     },
   });
-  if (!course) notFound();
+  if (!course || !(await canAccessProgram(user, course.programId))) notFound();
   const syl = course.syllabi[0];
 
   const roles = await programRolesOf(user.id, course.programId);

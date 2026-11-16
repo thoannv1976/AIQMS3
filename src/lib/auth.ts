@@ -66,6 +66,7 @@ export const getCurrentUser = cache(async () => {
     include: { department: { include: { faculty: true } } },
   });
   if (!user || !user.isActive) return null;
+  if (user.expiresAt && user.expiresAt.getTime() < Date.now()) return null; // tài khoản khách hết hạn
   return user;
 });
 
