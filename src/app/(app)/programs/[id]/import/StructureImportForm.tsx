@@ -15,12 +15,14 @@ export function StructureImportForm({ programId, programCode }: { programId: str
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [skip, setSkip] = useState<string[]>([]);
+  const [applyInfo, setApplyInfo] = useState(true);
   const [pending, start] = useTransition();
 
   const fd = (skipped: string[] = skip) => {
     const f = new FormData();
     files.forEach((x) => f.append("files", x));
     skipped.forEach((s) => f.append("skip", s));
+    if (applyInfo) f.append("applyInfo", "1");
     return f;
   };
   const onPick = (list: FileList | null) => {
@@ -45,9 +47,9 @@ export function StructureImportForm({ programId, programCode }: { programId: str
       <Card>
         <CardContent className="space-y-3 pt-5">
           <div className="flex flex-wrap items-center gap-2">
-            <input ref={inputRef} type="file" accept=".xlsx,.csv" multiple className="hidden" onChange={(e) => onPick(e.target.files)} />
+            <input ref={inputRef} type="file" accept=".xlsx,.csv,.docx" multiple className="hidden" onChange={(e) => onPick(e.target.files)} />
             <Button variant="outline" onClick={() => inputRef.current?.click()}>
-              <Upload className="h-4 w-4" /> Chọn tệp Excel
+              <Upload className="h-4 w-4" /> Chọn tệp Excel / Word
             </Button>
             {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- file download route, not a page */}
             <a href="/programs/import-template" className="inline-flex items-center gap-1 text-sm text-brand-700 hover:underline">
@@ -57,6 +59,8 @@ export function StructureImportForm({ programId, programCode }: { programId: str
           </div>
           <p className="text-xs text-slate-500">
             Hệ thống tự nhận sheet Học phần, PLO, Ma trận (cột PLO1, PLO2… với giá trị I/R/M) và CLO, kể cả khi có dòng tiêu đề phía trên bảng.
+            Với tệp Word (.docx): mỗi bảng được đọc như một sheet; PLO viết dạng đoạn văn &quot;PLO1: …&quot; cũng được nhận; bảng khai báo
+            thông tin chương trình (Tên tiếng Anh, Trình độ, Tổng số tín chỉ, Mục tiêu chung, PO1…, Phiên bản) dùng để cập nhật thông tin chung.
             Dữ liệu trùng mã sẽ được cập nhật; ô trống trong ma trận sẽ xóa liên kết cũ của học phần đó.
           </p>
           <Button disabled={!files.length || pending} onClick={() => start(async () => setPreview(await previewStructureImportAction(programId, fd())))}>
@@ -108,6 +112,31 @@ export function StructureImportForm({ programId, programCode }: { programId: str
               )}
             </div>
 
+            {p.plan.info && (
+              <div className="rounded-lg border border-brand-100 bg-brand-50/40 p-3 text-sm">
+                <label className="mb-2 flex items-center gap-2 font-medium text-slate-700">
+                  <input type="checkbox" checked={applyInfo} disabled={pending || !p.infoChanges.length} onChange={(e) => setApplyInfo(e.target.checked)} />
+                  Cập nhật thông tin chung của chương trình từ {p.plan.info.file}
+                </label>
+                {p.infoChanges.length ? (
+                  <table className="w-full text-xs">
+                    <thead><tr><Th>Thông tin</Th><Th>Hiện tại</Th><Th>Trong tệp</Th></tr></thead>
+                    <tbody>
+                      {p.infoChanges.map((c) => (
+                        <tr key={c.field}>
+                          <Td className="w-36 font-medium">{c.label}</Td>
+                          <Td className="whitespace-pre-line text-slate-500">{c.current || "—"}</Td>
+                          <Td className="whitespace-pre-line">{c.next}</Td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="text-xs text-slate-500">Thông tin chung trong tệp trùng với dữ liệu hiện có — không có gì thay đổi.</p>
+                )}
+              </div>
+            )}
+
             {(errors.length > 0 || warnings.length > 0) && (
               <ul className="max-h-48 space-y-1 overflow-auto rounded-lg bg-slate-50 p-3 text-xs">
                 {errors.map((i, k) => (
@@ -149,12 +178,15 @@ export function StructureImportForm({ programId, programCode }: { programId: str
 
             <div className="flex items-center gap-3 border-t border-slate-100 pt-3">
               <Button
-                disabled={pending || (p.plan.courses.length + p.plan.plos.length + p.plan.matrix.length + p.plan.clos.length === 0)}
+                disabled={pending || (p.plan.courses.length + p.plan.plos.length + p.plan.matrix.length + p.plan.clos.length === 0 && !(applyInfo && p.infoChanges.length))}
                 onClick={() =>
                   start(async () => {
                     const r = await applyStructureImportAction(programId, fd());
                     if (r.ok) {
-                      setDone(`Đã nhập: ${r.result.courses} học phần, ${r.result.plos} PLO, ${r.result.matrixCells} ô ma trận, ${r.result.clos} CLO.`);
+                      setDone(
+                        `Đã nhập: ${r.result.courses} học phần, ${r.result.plos} PLO, ${r.result.matrixCells} ô ma trận, ${r.result.clos} CLO` +
+                          (r.result.infoUpdated ? `; cập nhật ${r.result.infoUpdated} mục thông tin chung.` : "."),
+                      );
                       setPreview(null);
                       setSkip([]);
                     } else setDone("Lỗi: " + r.error);

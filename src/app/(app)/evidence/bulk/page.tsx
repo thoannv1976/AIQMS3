@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { canInProgram } from "@/lib/rbac";
 import { resolveProgram, programRolesOf } from "@/lib/program-context";
 import { PageHeader } from "@/components/ui";
+import { BackLink } from "@/components/BackLink";
 import { BulkUploadForm } from "./BulkUploadForm";
 
 export default async function BulkEvidencePage({ searchParams }: { searchParams: Promise<{ program?: string }> }) {
@@ -26,6 +27,7 @@ export default async function BulkEvidencePage({ searchParams }: { searchParams:
       <PageHeader
         title="Tải minh chứng hàng loạt"
         description={`Chương trình: ${selected.code} — ${selected.nameVi}${cycle ? ` · Bộ tiêu chí: ${cycle.standardSet.name.split("—")[0].trim()}` : ""}`}
+        actions={<BackLink href={`/evidence?program=${selected.id}`}>Danh sách minh chứng</BackLink>}
       />
       <BulkUploadForm programId={selected.id} criteria={criteria} existingCodes={existingCodes} />
     </div>

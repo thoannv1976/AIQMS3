@@ -59,7 +59,7 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
           <div className="flex gap-2">
             {canCourse && (
               <LinkButton href={`/programs/${program.id}/import`} variant="outline">
-                <FileSpreadsheet className="h-4 w-4" /> Nhập Excel
+                <FileSpreadsheet className="h-4 w-4" /> Nhập Excel/Word
               </LinkButton>
             )}
             <LinkButton href={`/programs/${program.id}/facts`} variant="outline">
@@ -104,8 +104,8 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
                   program.faculty.name
                 )}
               </DescItem>
-              <DescItem label="Mục tiêu đào tạo">{program.objectives ?? "—"}</DescItem>
-              <DescItem label="Mô tả">{program.description ?? "—"}</DescItem>
+              <DescItem label="Mục tiêu đào tạo"><span className="whitespace-pre-line">{program.objectives ?? "—"}</span></DescItem>
+              <DescItem label="Mô tả"><span className="whitespace-pre-line">{program.description ?? "—"}</span></DescItem>
             </dl>
           </CardContent>
         </Card>

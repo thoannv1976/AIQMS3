@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BackLink } from "@/components/BackLink";
 import { notFound } from "next/navigation";
 import { Pencil } from "lucide-react";
 import { prisma } from "@/lib/db";
@@ -57,6 +58,7 @@ export default async function SyllabusDetailPage({
         description={`${course.program.code} · ${course.credits} tín chỉ · Học kỳ ${course.semester ?? "—"}`}
         actions={
           <div className="flex items-center gap-2">
+            <BackLink href={`/syllabi?program=${course.programId}`}>Danh sách đề cương</BackLink>
             {syl && <Badge color={syllabusStatus[syl.status].color}>{syllabusStatus[syl.status].label}</Badge>}
             {(canOutcome || canSyllabus) &&
               (editing ? (
@@ -73,7 +75,7 @@ export default async function SyllabusDetailPage({
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           {!editing && <SyllabusReviewPanel courseId={course.id} />}
-          {editing && canSyllabus && <SyllabusImport courseId={course.id} />}
+          {editing && canSyllabus && <SyllabusImport courseId={course.id} programId={course.programId} />}
 
           <Card>
             <CardHeader>

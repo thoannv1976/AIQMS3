@@ -5,6 +5,7 @@ import { canInProgram } from "@/lib/rbac";
 import { canAccessProgram } from "@/lib/access";
 import { programRolesOf } from "@/lib/program-context";
 import { PageHeader } from "@/components/ui";
+import { BackLink } from "@/components/BackLink";
 import { StructureImportForm } from "./StructureImportForm";
 
 export const dynamic = "force-dynamic";
@@ -19,8 +20,9 @@ export default async function StructureImportPage({ params }: { params: Promise<
   return (
     <div>
       <PageHeader
-        title="Nhập cấu trúc chương trình từ Excel"
-        description={`${program.code} — ${program.nameVi} · Học phần, PLO, ma trận học phần–PLO (I/R/M) và CLO`}
+        title="Nhập cấu trúc chương trình từ Excel / Word"
+        description={`${program.code} — ${program.nameVi} · Thông tin chung, học phần, PLO, ma trận học phần–PLO (I/R/M) và CLO`}
+        actions={<BackLink href={`/programs/${program.id}`}>Về trang chương trình</BackLink>}
       />
       <StructureImportForm programId={program.id} programCode={program.code} />
     </div>

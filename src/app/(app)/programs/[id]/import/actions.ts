@@ -27,8 +27,8 @@ export type PreviewResult = { ok: true; preview: StructurePreview } | { ok: fals
 export async function previewStructureImportAction(programId: string, fd: FormData): Promise<PreviewResult> {
   try {
     await guard(programId);
-    const files = await filesFrom(fd);
-    if (!files.length) return { ok: false, error: "Chọn ít nhất một tệp Excel." };
+    const files = await filesFrom(fd, "files", { docx: true });
+    if (!files.length) return { ok: false, error: "Chọn ít nhất một tệp Excel hoặc Word." };
     const plan = await parseStructureFiles(files, { skip: skippedSheets(fd) });
     return { ok: true, preview: await previewStructure(programId, plan) };
   } catch (e) {
@@ -42,11 +42,12 @@ export async function applyStructureImportAction(
 ): Promise<{ ok: true; result: Awaited<ReturnType<typeof applyStructure>> } | { ok: false; error: string }> {
   try {
     const user = await guard(programId);
-    const files = await filesFrom(fd);
+    const files = await filesFrom(fd, "files", { docx: true });
     const plan = await parseStructureFiles(files, { skip: skippedSheets(fd) });
-    const result = await applyStructure(programId, plan);
+    const result = await applyStructure(programId, plan, { info: fd.get("applyInfo") === "1" });
     await logAudit({ userId: user.id, action: "IMPORT", entityType: "ProgramStructure", entityId: programId, detail: { files: files.map((f) => f.name), ...result } });
     revalidatePath(`/programs/${programId}`);
+    revalidatePath("/programs");
     revalidatePath("/outcomes");
     revalidatePath("/syllabi");
     return { ok: true, result };
