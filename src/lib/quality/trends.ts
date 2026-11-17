@@ -39,14 +39,29 @@ function directionOf(delta: number | null): TrendDirection {
   return "flat";
 }
 
+/**
+ * Chronological order for period labels such as "HK2 2023–2024", "2025-1", "K2022" or
+ * "K1 (TN 2025)": first 4-digit year, then the semester number (HK1/HK2/HK3 or "-1"/"-2").
+ * Plain string order would put "HK1 2025–2026" before "HK2 2023–2024".
+ */
+export function periodSortKey(label: string): number {
+  const year = Number(/(19|20)\d{2}/.exec(label)?.[0] ?? 9999);
+  const term = Number(/HK\s*(\d)/i.exec(label)?.[1] ?? /\d{4}\s*[-–/]\s*(\d)\b/.exec(label)?.[1] ?? 0);
+  return year * 10 + term;
+}
+export const comparePeriods = (a: string, b: string) => periodSortKey(a) - periodSortKey(b) || a.localeCompare(b, "vi");
+
 export async function getObeTrends(programId: string): Promise<ObeTrends> {
-  const rows = await prisma.outcomeAssessment.findMany({
+  const all = await prisma.outcomeAssessment.findMany({
     where: { programId },
     select: { ploCode: true, semester: true, cohort: true, achievedRate: true, threshold: true },
   });
+  // Measurement periods (semesters) and graduating cohorts are different time axes; when both
+  // exist, trend over semesters and keep cohort results for the detail table only.
+  const rows = all.some((r) => r.semester) ? all.filter((r) => r.semester) : all;
 
   const periodOf = (r: (typeof rows)[number]) => r.semester || r.cohort || "—";
-  const periods = [...new Set(rows.map(periodOf))].sort((a, b) => a.localeCompare(b, "vi"));
+  const periods = [...new Set(rows.map(periodOf))].sort(comparePeriods);
   const threshold = rows.length ? Math.round(rows[0].threshold) : 70;
 
   const periodSummary: PeriodSummary[] = periods.map((p) => {

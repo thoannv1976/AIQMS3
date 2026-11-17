@@ -1,10 +1,11 @@
-import { AlertTriangle, CheckCircle2, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { AlertTriangle, CheckCircle2, TrendingUp, TrendingDown, Minus, Upload } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { resolveProgram } from "@/lib/program-context";
-import { getObeTrends, type TrendDirection } from "@/lib/quality/trends";
+import { resolveProgram, programRolesOf } from "@/lib/program-context";
+import { canInProgram } from "@/lib/rbac";
+import { getObeTrends, comparePeriods, type TrendDirection } from "@/lib/quality/trends";
 import { ProgramSwitcher } from "@/components/program-switcher";
-import { Card, CardContent, CardHeader, CardTitle, Badge, PageHeader, EmptyState, Th, Td } from "@/components/ui";
+import { Card, CardContent, CardHeader, CardTitle, Badge, PageHeader, EmptyState, LinkButton, Th, Td } from "@/components/ui";
 import { BarChartCard, LineChartCard } from "@/components/charts";
 
 function TrendBadge({ direction, delta }: { direction: TrendDirection; delta: number | null }) {
@@ -30,37 +31,56 @@ function TrendBadge({ direction, delta }: { direction: TrendDirection; delta: nu
 }
 
 export default async function ObePage({ searchParams }: { searchParams: Promise<{ program?: string }> }) {
-  await requireUser();
+  const user = await requireUser();
   const sp = await searchParams;
   const { programs, selected } = await resolveProgram(sp.program);
+  const canImport = selected ? canInProgram(user.role, await programRolesOf(user.id, selected.id), "obe:write") : false;
 
   const rows = selected
-    ? await prisma.outcomeAssessment.findMany({ where: { programId: selected.id }, orderBy: { ploCode: "asc" } })
+    ? (await prisma.outcomeAssessment.findMany({ where: { programId: selected.id }, orderBy: { ploCode: "asc" } })).sort(
+        (a, b) => comparePeriods(a.semester || a.cohort || "", b.semester || b.cohort || "") || (a.ploCode ?? "").localeCompare(b.ploCode ?? "", "vi", { numeric: true }),
+      )
     : [];
   const trends = selected ? await getObeTrends(selected.id) : null;
 
-  const chartData = rows.map((r) => ({ name: r.ploCode ?? "?", value: Math.round(r.achievedRate) }));
-  const below = rows.filter((r) => r.achievedRate < r.threshold);
+  // Chart and warning describe the latest measurement period only (earlier periods are in the trend table).
+  const latestPeriod = trends?.periods.at(-1);
+  const current = latestPeriod && trends!.hasMultiplePeriods ? rows.filter((r) => (r.semester || r.cohort || "—") === latestPeriod) : rows;
+  const chartData = current.map((r) => ({ name: r.ploCode ?? r.cloCode ?? "?", value: Math.round(r.achievedRate) }));
+  const below = current.filter((r) => r.achievedRate < r.threshold);
 
   return (
     <div>
       <PageHeader
         title="Đánh giá mức độ đạt chuẩn đầu ra (OBE)"
         description="Tổng hợp tỷ lệ đạt PLO/CLO theo khóa, học kỳ; phát hiện chuẩn đầu ra đạt thấp"
-        actions={<ProgramSwitcher programs={programs} selectedId={selected?.id} />}
+        actions={
+          <div className="flex items-center gap-3">
+            <ProgramSwitcher programs={programs} selectedId={selected?.id} />
+            {selected && canImport && (
+              <LinkButton href={`/programs/${selected.id}/obe-import`} variant="outline">
+                <Upload className="h-4 w-4" /> Nhập từ Excel
+              </LinkButton>
+            )}
+          </div>
+        }
       />
 
       {!selected ? (
         <EmptyState title="Chưa có chương trình" />
       ) : rows.length === 0 ? (
-        <EmptyState title="Chưa có dữ liệu đánh giá chuẩn đầu ra" />
+        <EmptyState
+          title="Chưa có dữ liệu đánh giá chuẩn đầu ra"
+          description="Nhập tỷ lệ đạt PLO/CLO theo kỳ đo hoặc khóa tốt nghiệp từ Excel (cột PLO, Kỳ đo hoặc Khóa, % đạt, Ngưỡng, Số SV được đo)."
+          action={canImport ? <LinkButton href={`/programs/${selected.id}/obe-import`}><Upload className="h-4 w-4" /> Nhập từ Excel</LinkButton> : undefined}
+        />
       ) : (
         <div className="space-y-6">
           {below.length > 0 ? (
             <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
               <div>
-                <p className="font-medium">Cảnh báo: {below.length} chuẩn đầu ra đạt dưới ngưỡng.</p>
+                <p className="font-medium">Cảnh báo: {below.length} chuẩn đầu ra đạt dưới ngưỡng{latestPeriod && trends?.hasMultiplePeriods ? ` (kỳ gần nhất: ${latestPeriod})` : ""}.</p>
                 <p className="mt-0.5">
                   Cần ưu tiên cải tiến: {below.map((b) => `${b.ploCode} (${Math.round(b.achievedRate)}%)`).join(", ")}.
                   Hãy tạo kế hoạch cải tiến PDCA tương ứng.
@@ -157,7 +177,7 @@ export default async function ObePage({ searchParams }: { searchParams: Promise<
 
           <Card>
             <CardHeader>
-              <CardTitle>Tỷ lệ đạt PLO (%)</CardTitle>
+              <CardTitle>Tỷ lệ đạt PLO (%){latestPeriod && trends?.hasMultiplePeriods ? ` — ${latestPeriod}` : ""}</CardTitle>
             </CardHeader>
             <CardContent>
               <BarChartCard data={chartData} xKey="name" barKey="value" />

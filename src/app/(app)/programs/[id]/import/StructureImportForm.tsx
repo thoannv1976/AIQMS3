@@ -14,17 +14,26 @@ export function StructureImportForm({ programId, programCode }: { programId: str
   const [files, setFiles] = useState<File[]>([]);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  const [skip, setSkip] = useState<string[]>([]);
   const [pending, start] = useTransition();
 
-  const fd = () => {
+  const fd = (skipped: string[] = skip) => {
     const f = new FormData();
     files.forEach((x) => f.append("files", x));
+    skipped.forEach((s) => f.append("skip", s));
     return f;
   };
   const onPick = (list: FileList | null) => {
     setFiles(list ? Array.from(list) : []);
+    setSkip([]);
     setPreview(null);
     setDone(null);
+  };
+  // Unticking a sheet re-runs the preview without it, so counts and warnings stay accurate.
+  const toggleSheet = (where: string) => {
+    const next = skip.includes(where) ? skip.filter((s) => s !== where) : [...skip, where];
+    setSkip(next);
+    start(async () => setPreview(await previewStructureImportAction(programId, fd(next))));
   };
 
   const p = preview?.ok ? preview.preview : null;
@@ -81,8 +90,22 @@ export function StructureImportForm({ programId, programCode }: { programId: str
                 </div>
               ))}
             </div>
-            <div className="text-xs text-slate-500">
-              Sheet nhận được: {p.plan.sheets.map((s) => `${s.where} (${KIND_LABEL[s.kind]}, ${s.rows} dòng)`).join("; ") || "—"}
+            <div className="text-xs text-slate-600">
+              <div className="mb-1 font-medium text-slate-700">Sheet nhận được (bỏ chọn sheet không muốn nhập):</div>
+              {p.plan.sheets.length ? (
+                <ul className="flex flex-wrap gap-x-4 gap-y-1">
+                  {p.plan.sheets.map((s) => (
+                    <li key={s.where}>
+                      <label className={`inline-flex items-center gap-1.5 ${s.skipped ? "text-slate-400 line-through" : ""}`}>
+                        <input type="checkbox" checked={!s.skipped} disabled={pending || s.kind === "pi"} onChange={() => toggleSheet(s.where)} />
+                        {s.where} ({KIND_LABEL[s.kind]}, {s.rows} dòng)
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                "—"
+              )}
             </div>
 
             {(errors.length > 0 || warnings.length > 0) && (
@@ -133,6 +156,7 @@ export function StructureImportForm({ programId, programCode }: { programId: str
                     if (r.ok) {
                       setDone(`Đã nhập: ${r.result.courses} học phần, ${r.result.plos} PLO, ${r.result.matrixCells} ô ma trận, ${r.result.clos} CLO.`);
                       setPreview(null);
+                      setSkip([]);
                     } else setDone("Lỗi: " + r.error);
                   })
                 }

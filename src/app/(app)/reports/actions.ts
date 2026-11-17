@@ -231,6 +231,14 @@ export async function reviewSectionAdvancedAction(sectionId: string): Promise<Ad
     avgEvidenceStrength = strengths.length ? Math.round(strengths.reduce((s, v) => s + v, 0) / strengths.length) : 0;
   }
 
+  // Citation check feeds both the score and the AI review: bad/unapproved citations and uncited claims.
+  const fullText = [section.content, section.strengths, section.weaknesses, section.improvementPlan].filter(Boolean).join("\n");
+  const citations = await checkCitations(section.report.cycle.programId, critIds, fullText);
+  const badCitations = citations.filter((c) => !c.ok);
+  const uncited = uncitedClaims(fullText);
+  const citationIssues = badCitations.map((c) => `Trích dẫn [${c.code}]: ${c.problem}`);
+  const claimIssues = uncited.slice(0, 3).map((t) => `Nhận định chưa có trích dẫn: "${t.slice(0, 120)}"`);
+
   const quality = assessSarQuality({
     content: section.content,
     strengths: section.strengths,
@@ -239,14 +247,8 @@ export async function reviewSectionAdvancedAction(sectionId: string): Promise<Ad
     linkedEvidenceCount,
     approvedEvidenceCount,
     avgEvidenceStrength,
+    citations: { total: citations.length, invalid: badCitations.length, uncitedClaims: uncited.length },
   });
-
-  // Citation check feeds the AI review: bad/unapproved citations and uncited claims.
-  const fullText = [section.content, section.strengths, section.weaknesses, section.improvementPlan].filter(Boolean).join("\n");
-  const citationIssues = (await checkCitations(section.report.cycle.programId, critIds, fullText))
-    .filter((c) => !c.ok)
-    .map((c) => `Trích dẫn [${c.code}]: ${c.problem}`);
-  const claimIssues = uncitedClaims(fullText, 3).map((t) => `Nhận định chưa có trích dẫn: "${t.slice(0, 120)}"`);
 
   const res = await reviewReportSectionAdvanced(
     {

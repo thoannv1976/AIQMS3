@@ -11,6 +11,8 @@ export interface SarSectionInput {
   linkedEvidenceCount: number;
   approvedEvidenceCount: number;
   avgEvidenceStrength: number; // 0–100
+  /** Result of the citation check, when available: total [MC-…] codes and how many are invalid. */
+  citations?: { total: number; invalid: number; uncitedClaims: number };
 }
 
 export interface SarQuality {
@@ -81,6 +83,30 @@ export function assessSarQuality(input: SarSectionInput): SarQuality {
       hint: "Nâng chất lượng minh chứng (đính kèm tệp, trích xuất, phê duyệt).",
     },
   ];
+
+  // A section is not "strong" while its citations point to missing, unapproved, expired or
+  // unlinked evidence, or while key claims carry no citation at all.
+  if (input.citations) {
+    const { total, invalid, uncitedClaims } = input.citations;
+    checks.push(
+      {
+        key: "citations_valid",
+        label: invalid ? `Trích dẫn minh chứng hợp lệ (${invalid}/${total} trích dẫn có vấn đề)` : "Trích dẫn minh chứng hợp lệ",
+        passed: total > 0 && invalid === 0,
+        weight: 20,
+        hint: total
+          ? "Sửa các trích dẫn sai: gắn minh chứng vào tiêu chí, duyệt hoặc thay minh chứng hết hiệu lực, hoặc bỏ trích dẫn."
+          : "Trích dẫn minh chứng dạng [MC-x.y.zz] ngay tại các nhận định.",
+      },
+      {
+        key: "claims_cited",
+        label: uncitedClaims ? `Nhận định có số liệu đều có trích dẫn (${uncitedClaims} chỗ thiếu)` : "Nhận định có số liệu đều có trích dẫn",
+        passed: uncitedClaims === 0,
+        weight: 10,
+        hint: "Thêm trích dẫn minh chứng vào các câu nêu số liệu hoặc khẳng định.",
+      },
+    );
+  }
 
   const score = scoreFromChecks(checks);
   return { score, band: bandFor(score), checks };

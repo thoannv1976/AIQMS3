@@ -19,6 +19,9 @@ async function guard(programId: string) {
   return user;
 }
 
+/** Sheets the user unticked in the preview ("file › sheet"). */
+const skippedSheets = (fd: FormData) => fd.getAll("skip").map(String).filter(Boolean);
+
 export type PreviewResult = { ok: true; preview: StructurePreview } | { ok: false; error: string };
 
 export async function previewStructureImportAction(programId: string, fd: FormData): Promise<PreviewResult> {
@@ -26,7 +29,7 @@ export async function previewStructureImportAction(programId: string, fd: FormDa
     await guard(programId);
     const files = await filesFrom(fd);
     if (!files.length) return { ok: false, error: "Chọn ít nhất một tệp Excel." };
-    const plan = await parseStructureFiles(files);
+    const plan = await parseStructureFiles(files, { skip: skippedSheets(fd) });
     return { ok: true, preview: await previewStructure(programId, plan) };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Lỗi đọc tệp." };
@@ -40,7 +43,7 @@ export async function applyStructureImportAction(
   try {
     const user = await guard(programId);
     const files = await filesFrom(fd);
-    const plan = await parseStructureFiles(files);
+    const plan = await parseStructureFiles(files, { skip: skippedSheets(fd) });
     const result = await applyStructure(programId, plan);
     await logAudit({ userId: user.id, action: "IMPORT", entityType: "ProgramStructure", entityId: programId, detail: { files: files.map((f) => f.name), ...result } });
     revalidatePath(`/programs/${programId}`);

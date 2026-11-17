@@ -16,7 +16,8 @@ export interface StructurePlan {
   matrix: MatrixRow[];
   clos: CloRow[];
   issues: ImportIssue[];
-  sheets: Array<{ where: string; kind: string; rows: number }>;
+  /** Recognised sheets; `skipped` ones were unticked by the user and are not imported. */
+  sheets: Array<{ where: string; kind: string; rows: number; skipped?: boolean }>;
 }
 
 export interface StructurePreview {
@@ -29,6 +30,8 @@ const isHeader = (cells: string[]) => cells.filter(Boolean).length >= 2 && cells
 
 const COURSE_CODE = ["Mã HP", "Mã học phần", "Course code", "courseCode"];
 const PLO_RE = /^plo\s*\d+/;
+// Description column of a PLO sheet: the template's "Mô tả" plus wordings found in faculty files.
+const PLO_DESC = ["Mô tả chuẩn đầu ra", "Mô tả", "Description", "Nội dung", "Nội dung PLO", "Phát biểu PLO", "Phát biểu chuẩn đầu ra", "Phát biểu", "Statement"];
 
 function category(v: string): string | null {
   const n = norm(v);
@@ -76,11 +79,15 @@ function classify(t: SheetTable): "matrix" | "clo" | "course" | "plo" | "pi" | n
   if (H.some((h) => h === "ma clo" || h === "clo code" || h === "clo")) return "clo";
   if (hasCourse) return "course";
   if (H.some((h) => h === "ma pi" || h === "pi")) return "pi";
-  if (findCol(t.headers, ["Mã", "Mã PLO", "PLO", "Code"], { exact: true }) >= 0 && findCol(t.headers, ["Mô tả", "Mô tả chuẩn đầu ra", "Description", "Nội dung"]) >= 0) return "plo";
+  if (findCol(t.headers, ["Mã", "Mã PLO", "PLO", "Code"], { exact: true }) >= 0 && findCol(t.headers, PLO_DESC) >= 0) return "plo";
   return null;
 }
 
-export async function parseStructureFiles(files: Array<{ name: string; buffer: Buffer }>): Promise<StructurePlan> {
+export async function parseStructureFiles(
+  files: Array<{ name: string; buffer: Buffer }>,
+  opts: { skip?: string[] } = {},
+): Promise<StructurePlan> {
+  const skip = new Set(opts.skip ?? []);
   const plan: StructurePlan = { courses: [], plos: [], matrix: [], clos: [], issues: [], sheets: [] };
   for (const f of files) {
     let tables: SheetTable[];
@@ -94,6 +101,10 @@ export async function parseStructureFiles(files: Array<{ name: string; buffer: B
       const kind = classify(t);
       const where = `${t.file} › ${t.sheet}`;
       if (!kind) continue;
+      if (skip.has(where)) {
+        plan.sheets.push({ where, kind, rows: t.rows.length, skipped: true });
+        continue;
+      }
       plan.sheets.push({ where, kind, rows: t.rows.length });
       if (kind === "pi") {
         plan.issues.push({ where, message: "Sheet chỉ báo PI chỉ để tham khảo – hệ thống chưa lưu PI nên bỏ qua.", level: "warning" });
@@ -106,7 +117,7 @@ export async function parseStructureFiles(files: Array<{ name: string; buffer: B
         const cEn = findCol(t.headers, ["Tên tiếng Anh", "English name", "nameEn"]);
         const cCr = findCol(t.headers, ["Số TC", "Số tín chỉ", "Tín chỉ", "TC", "Credits"]);
         const cSem = findCol(t.headers, ["Học kỳ", "HK", "Semester"]);
-        const cType = findCol(t.headers, ["Loại (type)", "Loại", "Type", "Loại học phần"]);
+        const cType = findCol(t.headers, ["Loại (type)", "Loại", "Type", "Loại học phần", "Tính chất"]);
         for (const r of t.rows) {
           const code = str(r.cells[cCode]).toUpperCase();
           const nameVi = cName >= 0 ? str(r.cells[cName]) : "";
@@ -118,7 +129,7 @@ export async function parseStructureFiles(files: Array<{ name: string; buffer: B
         }
       } else if (kind === "plo") {
         const cCode = findCol(t.headers, ["Mã PLO", "Mã", "PLO", "Code"], { exact: true });
-        const cDesc = findCol(t.headers, ["Mô tả chuẩn đầu ra", "Mô tả", "Description", "Nội dung"]);
+        const cDesc = findCol(t.headers, PLO_DESC);
         const cCat = findCol(t.headers, ["Nhóm (category)", "Category", "Nhóm", "Loại"]);
         for (const r of t.rows) {
           const code = ploCode(str(r.cells[cCode]));
@@ -172,6 +183,17 @@ export async function parseStructureFiles(files: Array<{ name: string; buffer: B
   plan.plos = dedupe(plan.plos, (p) => p.code, "PLO");
   plan.matrix = dedupe(plan.matrix, (m) => m.courseCode, "Ma trận");
   plan.clos = dedupe(plan.clos, (c) => `${c.courseCode}/${c.code}`, "CLO");
+  // Several sheets of the same kind: rows with the same code are overwritten by the later sheet.
+  const KIND_NAME = { course: "học phần", matrix: "ma trận", clo: "CLO" } as const;
+  for (const kind of ["course", "matrix", "clo"] as const) {
+    const used = plan.sheets.filter((x) => x.kind === kind && !x.skipped);
+    if (used.length > 1)
+      plan.issues.unshift({
+        where: used.map((x) => x.where).join(" + "),
+        message: `Có ${used.length} sheet ${KIND_NAME[kind]}; mã trùng sẽ lấy theo sheet sau cùng (${used[used.length - 1].where}). Bỏ chọn sheet không dùng ở danh sách sheet bên trên.`,
+        level: "warning",
+      });
+  }
   if (!plan.sheets.length) plan.issues.push({ where: "Tệp tải lên", message: "Không tìm thấy sheet học phần, PLO, ma trận hoặc CLO. Hãy dùng tệp mẫu.", level: "error" });
   return plan;
 }
@@ -187,6 +209,12 @@ export async function previewStructure(programId: string, plan: StructurePlan): 
   const existingCourse = new Set(courses.map((c) => c.code));
   const existingPlo = new Set(plos.map((p) => p.code));
   const existingClo = new Set(courses.flatMap((c) => c.clos.map((k) => `${c.code}/${k.code}`)));
+  if (plan.matrix.length && ploCodes.size === 0)
+    plan.issues.unshift({
+      where: "PLO",
+      message: "Chương trình chưa có PLO và tệp không có sheet PLO nhận được (cột Mã + Mô tả/Phát biểu), nên toàn bộ ma trận sẽ bị bỏ qua. Thêm sheet PLO hoặc nhập PLO trước.",
+      level: "error",
+    });
   let cells = 0;
   for (const m of plan.matrix) {
     if (!courseCodes.has(m.courseCode)) plan.issues.push({ where: "Ma trận", message: `Học phần ${m.courseCode} chưa có – dòng ma trận sẽ bị bỏ qua.`, level: "error" });
