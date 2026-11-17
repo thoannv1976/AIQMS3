@@ -104,8 +104,8 @@ export default async function ProgramDetailPage({ params }: { params: Promise<{ 
                   program.faculty.name
                 )}
               </DescItem>
-              <DescItem label="Mục tiêu đào tạo">{program.objectives ?? "—"}</DescItem>
-              <DescItem label="Mô tả">{program.description ?? "—"}</DescItem>
+              <DescItem label="Mục tiêu đào tạo"><span className="whitespace-pre-line">{program.objectives ?? "—"}</span></DescItem>
+              <DescItem label="Mô tả"><span className="whitespace-pre-line">{program.description ?? "—"}</span></DescItem>
             </dl>
           </CardContent>
         </Card>
