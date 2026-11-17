@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { UploadCloud, CheckCircle2, XCircle, Loader2, Copy, Trash2 } from "lucide-react";
 import { Button, Card, CardContent, Input, Select, Badge, Label } from "@/components/ui";
 import { Progress } from "@/components/widgets";
@@ -9,7 +9,9 @@ import { parseEvidenceFilename } from "@/lib/evidence/filename";
 import { uploadEvidenceItemAction } from "../actions";
 
 const ACCEPT = ".pdf,.docx,.xlsx,.xls,.pptx,.txt,.md,.csv,.png,.jpg,.jpeg,.webp";
-const MAX_FILES = 50;
+// Each file goes up in its own request (≤ 15 MB), one after another, so the cap only bounds how
+// long one session takes (≈ 2–3 s per file) — it is not a server limit.
+const MAX_FILES = 100;
 const MAX_BYTES = 15 * 1024 * 1024;
 
 type RowStatus = "ready" | "uploading" | "done" | "error" | "duplicate" | "skipped";
@@ -40,12 +42,23 @@ export function BulkUploadForm({
   const [validUntil, setValidUntil] = useState("");
   const [running, setRunning] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [overflow, setOverflow] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const critByCode = useMemo(() => new Map(criteria.map((c) => [c.code, c.id])), [criteria]);
   const taken = useMemo(() => new Set(existingCodes), [existingCodes]);
 
+  // Leaving the page mid-upload would silently stop the queue.
+  useEffect(() => {
+    if (!running) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [running]);
+
   function addFiles(list: FileList | File[]) {
     const files = Array.from(list);
+    const fresh = files.filter((f) => !rows.some((r) => r.file.name === f.name && r.file.size === f.size));
+    setOverflow(Math.max(0, rows.length + fresh.length - MAX_FILES));
     setRows((prev) => {
       const next = [...prev];
       for (const f of files) {
@@ -133,6 +146,7 @@ export function BulkUploadForm({
           >
             <UploadCloud className="h-8 w-8 text-brand-500" />
             <div className="text-sm font-medium text-slate-700">Kéo-thả tệp vào đây hoặc bấm để chọn (tối đa {MAX_FILES} tệp, mỗi tệp ≤ 15 MB)</div>
+            {overflow > 0 && <div className="text-xs text-amber-700">Đã đạt giới hạn {MAX_FILES} tệp — bỏ qua {overflow} tệp. Tải lượt này xong rồi chọn tiếp.</div>}
             <div className="text-xs text-slate-500">
               Mã minh chứng và tiêu chí được đoán từ tên tệp, ví dụ <code>MC_1.1.01_Quyet_dinh.docx</code> → mã MC-1.1.01, tiêu chí 1.1.
             </div>
@@ -182,7 +196,7 @@ export function BulkUploadForm({
                 {errors > 0 && <span className="text-red-700"> · {errors} lỗi</span>}
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" disabled={running} onClick={() => setRows([])}>
+                <Button variant="outline" size="sm" disabled={running} onClick={() => { setRows([]); setOverflow(0); }}>
                   Xóa danh sách
                 </Button>
                 <Button size="sm" disabled={running || rows.every((r) => r.status !== "ready" && r.status !== "error")} onClick={uploadAll}>
@@ -191,6 +205,11 @@ export function BulkUploadForm({
               </div>
             </div>
             <Progress value={total ? Math.round((finished / total) * 100) : 0} />
+            {running && (
+              <p className="text-xs text-amber-700">
+                Đang tải {finished + 1 > total ? total : finished + 1}/{total} — giữ nguyên trang này đến khi xong (khoảng {Math.max(1, Math.ceil(((total - finished) * 2.5) / 60))} phút).
+              </p>
+            )}
 
             <div className="overflow-x-auto">
               <table className="w-full text-sm">

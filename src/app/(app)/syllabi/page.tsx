@@ -1,16 +1,18 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Files } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { resolveProgram } from "@/lib/program-context";
+import { canInProgram } from "@/lib/rbac";
+import { resolveProgram, programRolesOf } from "@/lib/program-context";
 import { ProgramSwitcher } from "@/components/program-switcher";
-import { Card, PageHeader, Badge, EmptyState, Th, Td } from "@/components/ui";
+import { Card, PageHeader, Badge, EmptyState, Th, Td, LinkButton } from "@/components/ui";
 import { syllabusStatus } from "@/lib/labels";
 
 export default async function SyllabiPage({ searchParams }: { searchParams: Promise<{ program?: string }> }) {
-  await requireUser();
+  const user = await requireUser();
   const sp = await searchParams;
   const { programs, selected } = await resolveProgram(sp.program);
+  const canBulk = !!selected && canInProgram(user.role, await programRolesOf(user.id, selected.id), "syllabus:write");
 
   const courses = selected
     ? await prisma.course.findMany({
@@ -25,7 +27,16 @@ export default async function SyllabiPage({ searchParams }: { searchParams: Prom
       <PageHeader
         title="Đề cương học phần"
         description="Quản lý đề cương, CLO, phương pháp giảng dạy và đánh giá theo mẫu thống nhất"
-        actions={<ProgramSwitcher programs={programs} selectedId={selected?.id} />}
+        actions={
+          <>
+            {canBulk && selected && (
+              <LinkButton href={`/syllabi/bulk?program=${selected.id}`} variant="outline">
+                <Files className="h-4 w-4" /> Nhập nhiều đề cương
+              </LinkButton>
+            )}
+            <ProgramSwitcher programs={programs} selectedId={selected?.id} />
+          </>
+        }
       />
 
       {!selected ? (

@@ -3,6 +3,8 @@
 import { prisma } from "@/lib/db";
 import { ContributionLevel, CloPloStrength } from "@/generated/prisma/enums";
 import { readTables, findCol, norm, str, int, type SheetTable } from "./sheet";
+import { readDocx } from "./docx";
+import { extractProgramInfo, infoScore, composeObjectives, composeDescription, type ProgramInfo } from "./program-info";
 
 export interface CourseRow { code: string; nameVi: string; nameEn: string | null; credits: number; semester: number | null; type: string | null }
 export interface PloRow { code: string; description: string; category: string | null }
@@ -18,10 +20,16 @@ export interface StructurePlan {
   issues: ImportIssue[];
   /** Recognised sheets; `skipped` ones were unticked by the user and are not imported. */
   sheets: Array<{ where: string; kind: string; rows: number; skipped?: boolean }>;
+  /** General program information found in a Word file (declaration table, PO1…). */
+  info: (ProgramInfo & { file: string }) | null;
 }
+
+export interface ProgramInfoChange { field: string; label: string; current: string; next: string }
 
 export interface StructurePreview {
   plan: StructurePlan;
+  /** Program fields the Word file would change (only filled when `plan.info` is present). */
+  infoChanges: ProgramInfoChange[];
   counts: Record<"courses" | "plos" | "matrixCells" | "clos", { create: number; update: number }>;
 }
 
@@ -88,14 +96,30 @@ export async function parseStructureFiles(
   opts: { skip?: string[] } = {},
 ): Promise<StructurePlan> {
   const skip = new Set(opts.skip ?? []);
-  const plan: StructurePlan = { courses: [], plos: [], matrix: [], clos: [], issues: [], sheets: [] };
+  const plan: StructurePlan = { courses: [], plos: [], matrix: [], clos: [], issues: [], sheets: [], info: null };
   for (const f of files) {
     let tables: SheetTable[];
     try {
       tables = await readTables(f, isHeader);
     } catch {
-      plan.issues.push({ where: f.name, message: "Không đọc được tệp (hỏng hoặc không phải Excel/CSV).", level: "error" });
+      plan.issues.push({ where: f.name, message: "Không đọc được tệp (hỏng hoặc không phải Excel/CSV/Word).", level: "error" });
       continue;
+    }
+    if (/\.docx$/i.test(f.name)) {
+      const doc = await readDocx(f.buffer);
+      const info = extractProgramInfo(doc);
+      if (!plan.info && infoScore(info) >= 2) plan.info = { ...info, file: f.name };
+      // PLOs written as paragraphs ("PLO1: …") when the document has no PLO table.
+      const hasPloTable = tables.some((t) => classify(t) === "plo");
+      const where = `${f.name} › Đoạn văn PLO`;
+      if (!hasPloTable) {
+        const rows = doc.paragraphs.flatMap((p) => p.split("\n")).map((l) => /^\s*(PLO\s*\d+)\s*[:.–\-)]\s*(.+)$/i.exec(l)).filter((m): m is RegExpExecArray => !!m);
+        if (rows.length) {
+          const skipped = skip.has(where);
+          plan.sheets.push({ where, kind: "plo", rows: rows.length, skipped: skipped || undefined });
+          if (!skipped) for (const m of rows) plan.plos.push({ code: ploCode(m[1]), description: m[2].trim(), category: null });
+        }
+      }
     }
     for (const t of tables) {
       const kind = classify(t);
@@ -194,7 +218,8 @@ export async function parseStructureFiles(
         level: "warning",
       });
   }
-  if (!plan.sheets.length) plan.issues.push({ where: "Tệp tải lên", message: "Không tìm thấy sheet học phần, PLO, ma trận hoặc CLO. Hãy dùng tệp mẫu.", level: "error" });
+  if (!plan.sheets.length && !plan.info)
+    plan.issues.push({ where: "Tệp tải lên", message: "Không tìm thấy bảng học phần, PLO, ma trận hoặc CLO. Hãy dùng tệp mẫu (Excel) hoặc đặt dữ liệu trong bảng Word có dòng tiêu đề (Mã HP, Tên học phần…).", level: "error" });
   return plan;
 }
 
@@ -228,6 +253,7 @@ export async function previewStructure(programId: string, plan: StructurePlan): 
   plan.issues = plan.issues.filter((x, i, a) => a.findIndex((y) => y.where === x.where && y.message === x.message) === i);
   return {
     plan,
+    infoChanges: await infoChanges(programId, plan),
     counts: {
       courses: { create: plan.courses.filter((c) => !existingCourse.has(c.code)).length, update: plan.courses.filter((c) => existingCourse.has(c.code)).length },
       plos: { create: plan.plos.filter((p) => !existingPlo.has(p.code)).length, update: plan.plos.filter((p) => existingPlo.has(p.code)).length },
@@ -237,10 +263,58 @@ export async function previewStructure(programId: string, plan: StructurePlan): 
   };
 }
 
+const DEGREE_LABEL: Record<string, string> = { BACHELOR: "Đại học", MASTER: "Thạc sĩ", DOCTORATE: "Tiến sĩ" };
+
+/** Field-by-field changes the Word declaration would make to the program (code and faculty are never changed). */
+async function infoChanges(programId: string, plan: StructurePlan): Promise<ProgramInfoChange[]> {
+  const i = plan.info;
+  if (!i) return [];
+  const p = await prisma.program.findUnique({ where: { id: programId }, include: { versions: { select: { versionLabel: true } } } });
+  if (!p) return [];
+  const out: ProgramInfoChange[] = [];
+  const add = (field: string, label: string, current: string | null | undefined, next: string | null | undefined) => {
+    if (next && next.trim() !== (current ?? "").trim()) out.push({ field, label, current: current ?? "", next });
+  };
+  add("nameVi", "Tên chương trình", p.nameVi, i.nameVi);
+  add("nameEn", "Tên tiếng Anh", p.nameEn, i.nameEn);
+  add("degreeLevel", "Trình độ", DEGREE_LABEL[p.degreeLevel], i.degreeLevel ? DEGREE_LABEL[i.degreeLevel] : null);
+  add("totalCredits", "Tổng số tín chỉ", p.totalCredits?.toString(), i.totalCredits?.toString());
+  add("objectives", "Mục tiêu đào tạo", p.objectives, composeObjectives(i));
+  add("description", "Mô tả", p.description, composeDescription(i));
+  if (i.versionLabel && !p.versions.some((v) => v.versionLabel === i.versionLabel))
+    out.push({ field: "version", label: "Phiên bản chương trình", current: "", next: `Tạo phiên bản ${i.versionLabel}${i.versionSummary ? ` (${i.versionSummary})` : ""}` });
+  if (i.code && i.code !== p.code)
+    plan.issues.push({ where: plan.info!.file, message: `Mã chương trình trong tệp (${i.code}) khác mã đang nhập (${p.code}) — kiểm tra lại đúng tệp chưa. Mã chương trình không bị thay đổi.`, level: "warning" });
+  return out;
+}
+
 /** Write the plan. Matrix rows replace that course's whole row (blank cells remove old links). */
-export async function applyStructure(programId: string, plan: StructurePlan) {
+export async function applyStructure(programId: string, plan: StructurePlan, opts: { info?: boolean } = {}) {
   return prisma.$transaction(
     async (tx) => {
+      let infoUpdated = 0;
+      const i = plan.info;
+      if (opts.info && i) {
+        const data = {
+          ...(i.nameVi ? { nameVi: i.nameVi } : {}),
+          ...(i.nameEn ? { nameEn: i.nameEn } : {}),
+          ...(i.degreeLevel ? { degreeLevel: i.degreeLevel } : {}),
+          ...(i.totalCredits ? { totalCredits: i.totalCredits } : {}),
+          ...(composeObjectives(i) ? { objectives: composeObjectives(i) } : {}),
+          ...(composeDescription(i) ? { description: composeDescription(i) } : {}),
+        };
+        if (Object.keys(data).length) {
+          await tx.program.update({ where: { id: programId }, data });
+          infoUpdated = Object.keys(data).length;
+        }
+        if (i.versionLabel && i.versionYear) {
+          const exists = await tx.programVersion.findUnique({ where: { programId_versionLabel: { programId, versionLabel: i.versionLabel } } });
+          if (!exists) {
+            await tx.programVersion.create({ data: { programId, versionLabel: i.versionLabel, year: i.versionYear, summary: i.versionSummary } });
+            infoUpdated++;
+          }
+        }
+      }
       for (const c of plan.courses) {
         await tx.course.upsert({
           where: { programId_code: { programId, code: c.code } },
@@ -282,7 +356,7 @@ export async function applyStructure(programId: string, plan: StructurePlan) {
         }
         clos++;
       }
-      return { courses: plan.courses.length, plos: plan.plos.length, matrixCells: cells, clos };
+      return { courses: plan.courses.length, plos: plan.plos.length, matrixCells: cells, clos, infoUpdated };
     },
     { timeout: 120_000, maxWait: 20_000 },
   );

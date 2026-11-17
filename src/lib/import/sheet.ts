@@ -1,7 +1,8 @@
-// Tolerant spreadsheet reader for data import (Excel .xlsx / .csv).
+// Tolerant spreadsheet reader for data import (Excel .xlsx / .csv, and tables inside Word .docx).
 // Finds the header row automatically (title rows above the table are allowed) and
 // returns plain string/number cells keyed by the header text.
 import ExcelJS from "exceljs";
+import { readDocx } from "./docx";
 
 export type Cell = string | number | null;
 export interface SheetTable {
@@ -45,6 +46,29 @@ export async function readTables(
   file: { name: string; buffer: Buffer },
   isHeader: (normalizedCells: string[]) => boolean,
 ): Promise<SheetTable[]> {
+  if (/\.docx$/i.test(file.name)) {
+    // Each Word table is read like a sheet named "Bảng n".
+    const doc = await readDocx(file.buffer);
+    const out: SheetTable[] = [];
+    for (const t of doc.tables) {
+      const width = Math.max(0, ...t.rows.map((r) => r.length));
+      const grid = t.rows.map((r, i) => ({ rowNumber: i + 1, cells: Array.from({ length: width }, (_, k) => (r[k] ?? "").trim() || null) as Cell[] }));
+      const hIdx = grid.slice(0, 12).findIndex((r) => isHeader(r.cells.map(norm)));
+      if (hIdx < 0) continue;
+      let headers = grid[hIdx].cells.map((c) => String(c ?? "").trim());
+      let first = hIdx + 1;
+      // Two-row headers are common in Word ("Mã HP | Tên | Chuẩn đầu ra" over "PLO1 | PLO2 …"):
+      // merge them, the lower row winning where it has text.
+      const next = grid[first];
+      if (next && isHeader(next.cells.map(norm))) {
+        headers = headers.map((h, i) => String(next.cells[i] ?? "").trim() || h);
+        first++;
+      }
+      const rows = grid.slice(first).filter((r) => r.cells.some((c) => c != null && String(c).trim() !== ""));
+      out.push({ file: file.name, sheet: `Bảng ${t.index}`, headers, rows });
+    }
+    return out;
+  }
   const wb = new ExcelJS.Workbook();
   if (/\.csv$/i.test(file.name)) {
     const { Readable } = await import("node:stream");
@@ -111,13 +135,16 @@ export function dateCell(c: Cell | undefined): Date | null {
 
 export const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
 
-/** Collect uploaded spreadsheet files from a FormData field. */
-export async function filesFrom(fd: FormData, field = "files"): Promise<Array<{ name: string; buffer: Buffer }>> {
+/** Collect uploaded spreadsheet files from a FormData field (`docx: true` also accepts Word files). */
+export async function filesFrom(fd: FormData, field = "files", opts: { docx?: boolean } = {}): Promise<Array<{ name: string; buffer: Buffer }>> {
   const out: Array<{ name: string; buffer: Buffer }> = [];
+  const ok = opts.docx ? /\.(xlsx|csv|docx)$/i : /\.(xlsx|csv)$/i;
   for (const v of fd.getAll(field)) {
     if (typeof v === "string" || !v.size) continue;
-    if (!/\.(xlsx|csv)$/i.test(v.name)) throw new Error(`Tệp ${v.name}: chỉ nhận .xlsx hoặc .csv`);
-    if (v.size > MAX_IMPORT_BYTES) throw new Error(`Tệp ${v.name} vượt quá 5 MB`);
+    if (!ok.test(v.name)) throw new Error(`Tệp ${v.name}: chỉ nhận ${opts.docx ? ".xlsx, .csv hoặc .docx" : ".xlsx hoặc .csv"}`);
+    // Word files often carry logos and images, so they get a larger allowance.
+    const max = /\.docx$/i.test(v.name) ? 2 * MAX_IMPORT_BYTES : MAX_IMPORT_BYTES;
+    if (v.size > max) throw new Error(`Tệp ${v.name} vượt quá ${max / 1024 / 1024} MB`);
     out.push({ name: v.name, buffer: Buffer.from(await v.arrayBuffer()) });
   }
   return out;

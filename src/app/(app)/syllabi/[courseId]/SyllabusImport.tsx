@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
 import { FileText, Upload, CheckCircle2, AlertTriangle, Loader2, Sparkles, X } from "lucide-react";
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Th, Td, Label, Textarea } from "@/components/ui";
@@ -24,7 +25,7 @@ const STRENGTH: Record<string, { label: string; color: "slate" | "blue" | "green
   HIGH: { label: "Cao", color: "green" },
 };
 
-export function SyllabusImport({ courseId }: { courseId: string }) {
+export function SyllabusImport({ courseId, programId }: { courseId: string; programId?: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [useAi, setUseAi] = useState(true);
@@ -133,8 +134,18 @@ export function SyllabusImport({ courseId }: { courseId: string }) {
 
         {done && (
           <div className="space-y-1 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <CheckCircle2 className="h-4 w-4" /> {done.text}
+              <span className="ml-auto flex gap-3 text-xs font-medium">
+                <Link href={`/syllabi/${courseId}`} className="hover:underline">
+                  Xem đề cương
+                </Link>
+                {programId && (
+                  <Link href={`/syllabi?program=${programId}`} className="hover:underline">
+                    ← Quay lại danh sách đề cương
+                  </Link>
+                )}
+              </span>
             </div>
             {done.warnings.length > 0 && (
               <ul className="space-y-0.5 pl-6 text-xs text-amber-700">
