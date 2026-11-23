@@ -235,7 +235,27 @@ function fixLocalJson(text: string): string {
   if (!/^[[{]/.test(body)) return text;
   try { JSON.parse(body); return text; } catch { /* try to repair */ }
   const fixed = repairJson(body);
-  try { JSON.parse(fixed); return fixed; } catch { return text; }
+  try { JSON.parse(fixed); return fixed; } catch { /* answer cut off mid-element */ }
+  // Answer stopped at the token limit inside an element: keep the complete elements of the top-level array/object.
+  const cut = keepCompleteElements(body);
+  if (cut) try { JSON.parse(cut); return cut; } catch { /* give up */ }
+  return text;
+}
+
+/** For JSON truncated mid-element, cut after the last complete top-level element and close the container. */
+function keepCompleteElements(s: string): string | null {
+  const open = s.trimStart()[0];
+  if (open !== "[" && open !== "{") return null;
+  let depth = 0, inStr = false, esc = false, lastEnd = -1;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) { if (esc) esc = false; else if (ch === "\\") esc = true; else if (ch === '"') inStr = false; continue; }
+    if (ch === '"') { inStr = true; continue; }
+    if (ch === "{" || ch === "[") depth++;
+    else if (ch === "}" || ch === "]") { depth--; if (depth === 1) lastEnd = i; }
+  }
+  if (lastEnd < 0) return null;
+  return repairJson(s.slice(0, lastEnd + 1));
 }
 
 /**
