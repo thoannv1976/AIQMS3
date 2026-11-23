@@ -290,6 +290,7 @@ async function callLocalAI(c: ProviderCall): Promise<ProviderResult> {
   if (!text && (choice?.message?.reasoning || choice?.message?.reasoning_content)) {
     throw new ProviderError("localai", `Mô hình ${c.model} dùng hết ${fit.maxTokens} token cho phần suy nghĩ, chưa có câu trả lời – tăng giới hạn token hoặc chọn mô hình khác.`);
   }
+  if (process.env.LOCALAI_DEBUG === "1") console.log(`[ai] localai/${c.model} raw (${usage?.completion_tokens ?? "?"} tok):`, JSON.stringify(text.slice(0, 3000)));
   return { text: fixLocalJson(text), inputTokens: usage?.prompt_tokens ?? 0, outputTokens: usage?.completion_tokens ?? 0 };
 }
 
