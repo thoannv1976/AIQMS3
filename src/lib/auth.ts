@@ -33,7 +33,8 @@ export async function createSession(userId: string): Promise<void> {
   const store = await cookies();
   store.set(COOKIE, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    // COOKIE_SECURE=false lets an on-premise install be used over plain http from other PCs on the LAN.
+    secure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === "true" : process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
     maxAge: sessionDays() * 24 * 60 * 60,
