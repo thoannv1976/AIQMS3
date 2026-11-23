@@ -21,6 +21,8 @@ export interface ProviderInfo {
 /** Default LocalAI address as seen from the app container (LocalAI running on the same PC). */
 export const LOCALAI_DEFAULT_BASE_URL = "http://host.docker.internal:8080/v1";
 const LOCALAI_TIMEOUT_MS = Number(process.env.LOCALAI_TIMEOUT_MS || 300_000);
+/** Context window of the local models (LocalAI context_size). Prompts are fitted into it instead of failing. */
+const LOCALAI_CONTEXT_TOKENS = Number(process.env.LOCALAI_CONTEXT_TOKENS || 8192);
 
 export const PROVIDERS: Record<ProviderId, ProviderInfo> = {
   anthropic: {
@@ -196,6 +198,25 @@ function localAiNetworkError(e: unknown, baseUrl: string): ProviderError {
 }
 
 /**
+ * Fit prompt + answer into the local model's context window: first shrink the answer budget (not below 1024
+ * tokens), then cut the end of the prompt — prompts put instructions first and source material (evidence) last.
+ * Token counts are estimated conservatively for Vietnamese (~2.2 characters per token).
+ */
+export function fitLocalContext(system: string, prompt: string, maxTokens: number, ctx = LOCALAI_CONTEXT_TOKENS): { prompt: string; maxTokens: number; trimmed: boolean } {
+  const CHARS_PER_TOKEN = 2.2;
+  const reserve = 256; // chat template + safety margin
+  const tokens = (s: string) => Math.ceil(s.length / CHARS_PER_TOKEN);
+  const input = tokens(system) + tokens(prompt);
+  let out = maxTokens;
+  if (input + out + reserve > ctx) out = Math.max(Math.min(maxTokens, 1024), ctx - input - reserve);
+  const room = ctx - out - reserve - tokens(system);
+  if (tokens(prompt) <= room) return { prompt, maxTokens: out, trimmed: false };
+  const note = "\n…(phần cuối đã được rút gọn cho vừa giới hạn ngữ cảnh của mô hình nội bộ)";
+  const keep = Math.max(0, Math.floor(room * CHARS_PER_TOKEN) - note.length);
+  return { prompt: prompt.slice(0, keep) + note, maxTokens: out, trimmed: true };
+}
+
+/**
  * LocalAI speaks the OpenAI chat API. The installed models are "thinking" models: thinking is switched off via
  * chat_template_kwargs, and only message.content is used (message.reasoning is never shown as the answer).
  */
@@ -203,14 +224,16 @@ async function callLocalAI(c: ProviderCall): Promise<ProviderResult> {
   if (c.attachment) throw new ProviderError("localai", "LocalAI (máy chủ nội bộ) chưa hỗ trợ đọc tệp PDF/ảnh (OCR) – cần Claude, OpenAI hoặc Gemini cho việc này.");
   if (!c.baseUrl) throw new ProviderError("localai", "Chưa cấu hình địa chỉ LocalAI.");
   const base = normalizeBaseUrl(c.baseUrl);
+  const fit = fitLocalContext(c.system ?? "", c.prompt, c.maxTokens);
+  if (fit.trimmed) console.warn(`[ai] localai/${c.model}: prompt trimmed to fit ${LOCALAI_CONTEXT_TOKENS}-token context`);
   let json: Record<string, unknown>;
   try {
     json = await postJson("localai", `${base}/chat/completions`, c.apiKey ? { Authorization: `Bearer ${c.apiKey}` } : {}, {
       model: c.model,
-      max_tokens: c.maxTokens,
+      max_tokens: fit.maxTokens,
       temperature: 0.3,
       chat_template_kwargs: { enable_thinking: false },
-      messages: [...(c.system ? [{ role: "system", content: c.system }] : []), { role: "user", content: c.prompt }],
+      messages: [...(c.system ? [{ role: "system", content: c.system }] : []), { role: "user", content: fit.prompt }],
     }, LOCALAI_TIMEOUT_MS);
   } catch (e) {
     throw localAiNetworkError(e, base);
@@ -220,7 +243,7 @@ async function callLocalAI(c: ProviderCall): Promise<ProviderResult> {
   // Some templates still emit <think>…</think> inline: strip it.
   const text = (choice?.message?.content ?? "").replace(/<think>[\s\S]*?<\/think>/g, "").trim();
   if (!text && (choice?.message?.reasoning || choice?.message?.reasoning_content)) {
-    throw new ProviderError("localai", `Mô hình ${c.model} dùng hết ${c.maxTokens} token cho phần suy nghĩ, chưa có câu trả lời – tăng giới hạn token hoặc chọn mô hình khác.`);
+    throw new ProviderError("localai", `Mô hình ${c.model} dùng hết ${fit.maxTokens} token cho phần suy nghĩ, chưa có câu trả lời – tăng giới hạn token hoặc chọn mô hình khác.`);
   }
   return { text, inputTokens: usage?.prompt_tokens ?? 0, outputTokens: usage?.completion_tokens ?? 0 };
 }
