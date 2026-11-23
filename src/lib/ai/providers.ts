@@ -218,7 +218,8 @@ export function fitLocalContext(system: string, prompt: string, maxTokens: numbe
 
 /**
  * LocalAI speaks the OpenAI chat API. The installed models are "thinking" models: thinking is switched off via
- * chat_template_kwargs, and only message.content is used (message.reasoning is never shown as the answer).
+ * reasoning_effort "none" (+ chat_template_kwargs for other servers), and only message.content is used
+ * (message.reasoning is never shown as the answer).
  */
 async function callLocalAI(c: ProviderCall): Promise<ProviderResult> {
   if (c.attachment) throw new ProviderError("localai", "LocalAI (máy chủ nội bộ) chưa hỗ trợ đọc tệp PDF/ảnh (OCR) – cần Claude, OpenAI hoặc Gemini cho việc này.");
@@ -232,6 +233,9 @@ async function callLocalAI(c: ProviderCall): Promise<ProviderResult> {
       model: c.model,
       max_tokens: fit.maxTokens,
       temperature: 0.3,
+      // LocalAI v4 only skips the thinking phase with reasoning_effort "none"; enable_thinking alone still lets the
+      // model think (measured: 450 vs 66 output tokens, 11.5 s vs 1.8 s for the same JSON answer).
+      reasoning_effort: "none",
       chat_template_kwargs: { enable_thinking: false },
       messages: [...(c.system ? [{ role: "system", content: c.system }] : []), { role: "user", content: fit.prompt }],
     }, LOCALAI_TIMEOUT_MS);
