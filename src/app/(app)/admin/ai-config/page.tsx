@@ -4,7 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { can } from "@/lib/rbac";
 import { getAiConfig } from "@/lib/ai/config";
 import { periodStarts } from "@/lib/ai/budget";
-import { PROVIDERS, PROVIDER_IDS } from "@/lib/ai/providers";
+import { LOCALAI_DEFAULT_BASE_URL, PROVIDERS, PROVIDER_IDS } from "@/lib/ai/providers";
 import { AI_LAST_ERROR_KEY } from "@/lib/ai/client";
 import { builtinPricing, featureLabel, formatTokens, formatUsd, formatVnd, USD_TO_VND } from "@/lib/ai/usage";
 import { Badge, Card, CardContent, CardHeader, CardTitle, PageHeader, Td, Th } from "@/components/ui";
@@ -27,7 +27,7 @@ async function loadUsage() {
     prisma.aiUsageLog.findMany({ orderBy: { createdAt: "desc" }, take: 15, include: { user: { select: { fullName: true } } } }),
     prisma.aiUsageLog.findMany({ where: { ...real, createdAt: { gte: month } }, select: { createdAt: true, costUsd: true } }),
     prisma.appSetting.findUnique({ where: { key: AI_LAST_ERROR_KEY } }),
-    prisma.aiUsageLog.findMany({ distinct: ["model"], where: real, select: { model: true } }),
+    prisma.aiUsageLog.findMany({ distinct: ["model", "provider"], where: real, select: { model: true, provider: true } }),
   ]);
   const fallbackCount = await prisma.aiUsageLog.count({ where: { usedFallback: true, createdAt: { gte: month } } });
   const users = await prisma.user.findMany({ where: { id: { in: byUser.map((u) => u.userId).filter((x): x is string => Boolean(x)) } }, select: { id: true, fullName: true } });
@@ -48,7 +48,8 @@ async function loadUsage() {
     perDay: [...perDay.entries()].sort(),
     recent,
     lastErr: (lastErr?.value ?? null) as { at: string; message: string } | null,
-    usedModels: models.map((m) => m.model).filter((m) => m !== "fallback-heuristic"),
+    usedModels: [...new Set(models.map((m) => m.model).filter((m) => m !== "fallback-heuristic"))],
+    localModels: models.filter((m) => PROVIDERS[(m.provider ?? "anthropic") as keyof typeof PROVIDERS]?.local).map((m) => m.model),
   };
 }
 
@@ -61,10 +62,12 @@ export default async function AiConfigPage() {
   const warn = (spent: number, limit: number | null) => limit != null && spent >= limit * b.warnPct;
   const priceModels = [...new Set([cfg.tiers.high.model, cfg.tiers.economy.model, ...u.usedModels, ...Object.keys(cfg.prices)])].filter(Boolean);
   const maxDay = Math.max(0.0001, ...u.perDay.map(([, v]) => v));
+  // Models served by the self-hosted LocalAI cost nothing per token.
+  const localModels = new Set([...Object.values(cfg.tiers).filter((t) => PROVIDERS[t.provider].local).map((t) => t.model), ...u.localModels]);
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Cấu hình AI" description="Nhà cung cấp (Claude, OpenAI, Gemini), phân tầng mô hình, hạn mức chi phí và theo dõi sử dụng AI toàn hệ thống." />
+      <PageHeader title="Cấu hình AI" description="Nhà cung cấp (Claude, OpenAI, Gemini, LocalAI nội bộ), phân tầng mô hình, hạn mức chi phí và theo dõi sử dụng AI toàn hệ thống." />
 
       {(warn(u.month, b.monthlyUsd) || warn(u.day, b.dailyUsd)) && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -115,8 +118,9 @@ export default async function AiConfigPage() {
             <p className="rounded bg-red-50 px-3 py-2 text-xs text-red-700">Lỗi AI gần nhất ({formatDateTime(u.lastErr.at)}): {u.lastErr.message}</p>
           )}
           <ProvidersAndRouting
-            providers={PROVIDER_IDS.map((id) => ({ id, label: PROVIDERS[id].label, keyHint: PROVIDERS[id].keyHint, last4: cfg.keys[id].last4, source: cfg.keys[id].source, suggested: PROVIDERS[id].suggested, consoleUrl: PROVIDERS[id].consoleUrl }))}
+            providers={PROVIDER_IDS.map((id) => ({ id, label: PROVIDERS[id].label, keyHint: PROVIDERS[id].keyHint, last4: cfg.keys[id].last4, source: cfg.keys[id].source, ready: cfg.keys[id].ready, local: Boolean(PROVIDERS[id].local), suggested: PROVIDERS[id].suggested, consoleUrl: PROVIDERS[id].consoleUrl }))}
             routing={{ mode: cfg.mode, high: cfg.tiers.high, economy: cfg.tiers.economy, fallback: cfg.fallback }}
+            localai={{ baseUrl: cfg.localai.baseUrl, source: cfg.localai.source, defaultUrl: LOCALAI_DEFAULT_BASE_URL }}
           />
         </CardContent>
       </Card>
@@ -124,7 +128,7 @@ export default async function AiConfigPage() {
       <Card>
         <CardHeader><CardTitle>Bảng đơn giá</CardTitle></CardHeader>
         <CardContent>
-          <PriceTable rows={priceModels.map((m) => ({ model: m, builtin: builtinPricing(m), override: cfg.prices[m] ?? null, used: m === cfg.tiers.high.model || m === cfg.tiers.economy.model }))} />
+          <PriceTable rows={priceModels.map((m) => ({ model: m, builtin: localModels.has(m) ? { input: 0, output: 0 } : builtinPricing(m), override: cfg.prices[m] ?? null, used: m === cfg.tiers.high.model || m === cfg.tiers.economy.model }))} />
         </CardContent>
       </Card>
 

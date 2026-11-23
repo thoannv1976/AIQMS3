@@ -1,4 +1,4 @@
-// Single entry point for AI text generation across providers (Claude, OpenAI, Gemini).
+// Single entry point for AI text generation across providers (Claude, OpenAI, Gemini, LocalAI).
 // Principle from the spec: AI only *suggests*; humans review and approve. Every call:
 //   1. picks the tier for the feature ("high" quality vs "economy") and the provider chain (primary + fallbacks),
 //   2. checks the spending limits with a cost estimate before calling,
@@ -55,7 +55,7 @@ export function estimateTokens(text: string): number {
 export function candidatesFor(cfg: AiConfig, tier: Tier): Array<{ provider: ProviderId; model: string }> {
   const out: Array<{ provider: ProviderId; model: string }> = [];
   const push = (provider: ProviderId, model: string) => {
-    if (model && cfg.keys[provider].key && !out.some((c) => c.provider === provider)) out.push({ provider, model });
+    if (model && cfg.keys[provider].ready && !out.some((c) => c.provider === provider)) out.push({ provider, model });
   };
   push(cfg.tiers[tier].provider, cfg.tiers[tier].model);
   for (const p of cfg.fallback) {
@@ -69,7 +69,12 @@ export function candidatesFor(cfg: AiConfig, tier: Tier): Array<{ provider: Prov
 /** True when at least one provider is usable under the current configuration. */
 export async function aiConfigured(): Promise<boolean> {
   const cfg = await getAiConfig();
-  return cfg.mode !== "mock" && PROVIDER_IDS.some((p) => cfg.keys[p].key);
+  return cfg.mode !== "mock" && PROVIDER_IDS.some((p) => cfg.keys[p].ready);
+}
+
+/** Call arguments that depend on the provider (key, LocalAI address). */
+function access(cfg: AiConfig, p: ProviderId): { apiKey: string; baseUrl?: string } {
+  return { apiKey: cfg.keys[p].key ?? "", baseUrl: PROVIDERS[p].local ? cfg.localai.baseUrl ?? undefined : undefined };
 }
 
 export async function aiModel(): Promise<string> {
@@ -99,12 +104,21 @@ export async function aiComplete(opts: {
     return { text: opts.fallback(), usedFallback: true, model: "fallback-heuristic", blockedReason };
   };
 
-  const candidates = cfg.mode === "mock" ? [] : candidatesFor(cfg, tier);
-  if (!candidates.length) return fallbackResult();
+  const all = cfg.mode === "mock" ? [] : candidatesFor(cfg, tier);
+  // PDF/image input (OCR) only goes to providers that can read files; say so instead of failing.
+  const candidates = opts.attachment ? all.filter((c) => PROVIDERS[c.provider].vision) : all;
+  if (!candidates.length) {
+    if (all.length) {
+      const reason = `${PROVIDERS[all[0].provider].label} chưa hỗ trợ đọc tệp PDF/ảnh (OCR) – thêm key Claude, OpenAI hoặc Gemini để dùng tính năng này.`;
+      await recordAiError(new Error(reason));
+      return fallbackResult(reason);
+    }
+    return fallbackResult();
+  }
 
   // Spending limits: estimate with the primary model (input from text length, output at the cap).
   const estIn = estimateTokens(`${opts.system ?? ""}${opts.prompt}`) + (opts.attachment ? Math.ceil(opts.attachment.base64.length / 3) : 0);
-  const est = estimateCostUsd(candidates[0].model, estIn, maxTokens, cfg.prices);
+  const est = estimateCostUsd(candidates[0].model, estIn, maxTokens, cfg.prices, candidates[0].provider);
   const decision = await checkBudget(cfg.budget, est, opts.userId);
   if (!decision.ok) {
     await recordAiError(new Error(decision.reason));
@@ -113,10 +127,10 @@ export async function aiComplete(opts: {
 
   for (const c of candidates) {
     try {
-      const r = await callProvider({ provider: c.provider, model: c.model, apiKey: cfg.keys[c.provider].key!, system: opts.system, prompt: opts.prompt, maxTokens, tier, attachment: opts.attachment });
+      const r = await callProvider({ provider: c.provider, model: c.model, ...access(cfg, c.provider), system: opts.system, prompt: opts.prompt, maxTokens, tier, attachment: opts.attachment });
       await logAiUsage({
         feature, model: c.model, provider: c.provider, tier, inputTokens: r.inputTokens, outputTokens: r.outputTokens,
-        costUsd: estimateCostUsd(c.model, r.inputTokens, r.outputTokens, cfg.prices), usedFallback: false, success: true, userId: opts.userId,
+        costUsd: estimateCostUsd(c.model, r.inputTokens, r.outputTokens, cfg.prices, c.provider), usedFallback: false, success: true, userId: opts.userId,
       });
       await maybeWarn(cfg.budget).catch(() => {});
       if (!r.text) continue;
@@ -146,19 +160,28 @@ export async function testAiConnection(provider: ProviderId = "anthropic", userI
   const cfg = await getAiConfig();
   const k = cfg.keys[provider];
   const useModel = model || (cfg.tiers.high.provider === provider ? cfg.tiers.high.model : cfg.tiers.economy.provider === provider ? cfg.tiers.economy.model : PROVIDERS[provider].defaults.economy);
-  if (!k.key) return { ok: false, provider, model: useModel, keySource: k.source, message: "Chưa có API key cho nhà cung cấp này." };
+  const local = Boolean(PROVIDERS[provider].local);
+  if (!k.ready) return { ok: false, provider, model: useModel, keySource: k.source, message: local ? "Chưa cấu hình địa chỉ LocalAI." : "Chưa có API key cho nhà cung cấp này." };
+  const acc = access(cfg, provider);
   let models: string[] | undefined;
+  let listError = "";
   try {
-    models = await listModels(provider, k.key);
-  } catch {
+    models = await listModels(provider, acc.apiKey, acc.baseUrl);
+  } catch (e) {
     models = undefined;
+    listError = e instanceof Error ? e.message : String(e);
   }
+  if (local && !models) return { ok: false, provider, model: useModel, keySource: k.source, message: `Lỗi kết nối: ${listError || "không đọc được danh sách mô hình."}` };
   if (!useModel) {
     return { ok: Boolean(models), provider, model: "", keySource: k.source, models, message: models ? `Key hợp lệ: ${models.length} mô hình khả dụng. Chọn mô hình rồi kiểm tra lại.` : "Không liệt kê được mô hình – kiểm tra lại key." };
   }
+  if (local && models && !models.includes(useModel)) {
+    return { ok: false, provider, model: useModel, keySource: k.source, models, message: `LocalAI không có mô hình ${useModel}. Chọn một trong ${models.length} mô hình khả dụng.` };
+  }
   try {
-    const r = await callProvider({ provider, model: useModel, apiKey: k.key, prompt: "ping – trả lời 'ok'.", maxTokens: 16, tier: "economy" });
-    await logAiUsage({ feature: "connection_test", model: useModel, provider, inputTokens: r.inputTokens, outputTokens: r.outputTokens, costUsd: estimateCostUsd(useModel, r.inputTokens, r.outputTokens, cfg.prices), usedFallback: false, success: true, userId });
+    // Local models may need to load into GPU memory first (~90 s) and think before answering: allow more tokens.
+    const r = await callProvider({ provider, model: useModel, ...acc, prompt: "ping – trả lời 'ok'.", maxTokens: local ? 64 : 16, tier: "economy" });
+    await logAiUsage({ feature: "connection_test", model: useModel, provider, inputTokens: r.inputTokens, outputTokens: r.outputTokens, costUsd: estimateCostUsd(useModel, r.inputTokens, r.outputTokens, cfg.prices, provider), usedFallback: false, success: true, userId });
     return { ok: true, provider, model: useModel, keySource: k.source, models, message: `Kết nối ${PROVIDERS[provider].label} thành công với mô hình ${useModel}.`, inputTokens: r.inputTokens, outputTokens: r.outputTokens };
   } catch (err) {
     await logAiUsage({ feature: "connection_test", model: useModel, provider, inputTokens: 0, outputTokens: 0, costUsd: 0, usedFallback: true, success: false, userId });

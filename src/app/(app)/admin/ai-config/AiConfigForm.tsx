@@ -3,11 +3,12 @@
 import { useState, useTransition } from "react";
 import { Zap, Save, Trash2, Loader2, Plus, RefreshCw } from "lucide-react";
 import { Button, Input, Label, Select, Badge } from "@/components/ui";
-import { saveKeyAction, testConnectionAction, saveRoutingAction, saveBudgetAction, savePricesAction, recalcCostsAction, type ActionMsg } from "./actions";
+import { saveKeyAction, saveLocalAiUrlAction, testConnectionAction, saveRoutingAction, saveBudgetAction, savePricesAction, recalcCostsAction, type ActionMsg } from "./actions";
 import type { ConnectionTestResult } from "@/lib/ai/client";
 
-type P = "anthropic" | "openai" | "gemini";
-export interface ProviderView { id: P; label: string; keyHint: string; last4: string | null; source: "db" | "env" | "none"; suggested: string[]; consoleUrl: string }
+type P = "anthropic" | "openai" | "gemini" | "localai";
+export interface ProviderView { id: P; label: string; keyHint: string; last4: string | null; source: "db" | "env" | "none"; ready: boolean; local: boolean; suggested: string[]; consoleUrl: string }
+export interface LocalAiView { baseUrl: string | null; source: "db" | "env" | "none"; defaultUrl: string }
 export interface RoutingView { mode: string; high: { provider: P; model: string }; economy: { provider: P; model: string }; fallback: P[] }
 
 function Msg({ m }: { m: ActionMsg | null }) {
@@ -15,8 +16,9 @@ function Msg({ m }: { m: ActionMsg | null }) {
   return <span className={`text-xs ${m.ok ? "text-green-700" : "text-red-600"}`}>{m.message}</span>;
 }
 
-/** API keys for the three providers + tier routing (models discovered by "Kiểm tra" feed the pickers). */
-export function ProvidersAndRouting({ providers, routing }: { providers: ProviderView[]; routing: RoutingView }) {
+/** API keys for the cloud providers, the LocalAI address + tier routing (models discovered by "Kiểm tra" feed the pickers). */
+export function ProvidersAndRouting({ providers, routing, localai }: { providers: ProviderView[]; routing: RoutingView; localai: LocalAiView }) {
+  const [url, setUrl] = useState(localai.baseUrl ?? localai.defaultUrl);
   const [found, setFound] = useState<Record<string, string[]>>({});
   const [tests, setTests] = useState<Record<string, ConnectionTestResult | null>>({});
   const [msgs, setMsgs] = useState<Record<string, ActionMsg | null>>({});
@@ -31,19 +33,39 @@ export function ProvidersAndRouting({ providers, routing }: { providers: Provide
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {providers.map((p) => (
           <div key={p.id} className="space-y-2 rounded-lg border border-slate-200 p-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <span className="font-semibold text-slate-800">{p.label}</span>
-              {p.source === "none" ? <Badge color="slate">Chưa có key</Badge> : <Badge color="green">••••{p.last4} ({p.source === "db" ? "CSDL" : "biến môi trường"})</Badge>}
+              {p.local
+                ? (p.ready ? <Badge color="green">Đã cấu hình ({localai.source === "db" ? "CSDL" : "biến môi trường"})</Badge> : <Badge color="slate">Chưa cấu hình</Badge>)
+                : p.source === "none" ? <Badge color="slate">Chưa có key</Badge> : <Badge color="green">••••{p.last4} ({p.source === "db" ? "CSDL" : "biến môi trường"})</Badge>}
             </div>
+            {p.local && (
+              <div className="space-y-1.5">
+                <Label>Địa chỉ máy chủ (chuẩn OpenAI)</Label>
+                <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder={localai.defaultUrl} className="font-mono text-xs" />
+                <div className="flex flex-wrap gap-1.5">
+                  <Button size="sm" disabled={pending || !url.trim()} onClick={() => run("u" + p.id, async () => setMsgs({ ...msgs, [p.id]: await saveLocalAiUrlAction(url) }))}>
+                    {busy === "u" + p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Lưu địa chỉ
+                  </Button>
+                  {localai.source === "db" && (
+                    <Button size="sm" variant="ghost" disabled={pending} title="Xóa địa chỉ đã lưu" onClick={() => { if (confirm("Xóa địa chỉ LocalAI đã lưu?")) run("x" + p.id, async () => setMsgs({ ...msgs, [p.id]: await saveLocalAiUrlAction(null) })); }}>
+                      <Trash2 className="h-4 w-4 text-red-500" />
+                    </Button>
+                  )}
+                </div>
+                <p className="text-[11px] leading-tight text-slate-500">Không tốn phí theo token. Chưa hỗ trợ OCR tệp PDF/ảnh. Lần gọi đầu có thể mất ~1–2 phút để nạp mô hình vào GPU.</p>
+                <Label>API key (nếu LocalAI có đặt)</Label>
+              </div>
+            )}
             <Input type="password" autoComplete="off" placeholder={`${p.keyHint} (để trống = giữ key hiện tại)`} value={keys[p.id] ?? ""} onChange={(e) => setKeys({ ...keys, [p.id]: e.target.value })} />
             <div className="flex flex-wrap gap-1.5">
               <Button size="sm" disabled={pending || !(keys[p.id] ?? "").trim()} onClick={() => run("k" + p.id, async () => { const m = await saveKeyAction(p.id, keys[p.id] ?? ""); setMsgs({ ...msgs, [p.id]: m }); if (m.ok) setKeys({ ...keys, [p.id]: "" }); })}>
                 {busy === "k" + p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Lưu key
               </Button>
-              <Button size="sm" variant="outline" disabled={pending || p.source === "none"} onClick={() => run("t" + p.id, async () => { const r = await testConnectionAction(p.id); setTests({ ...tests, [p.id]: r }); if (r.models) setFound({ ...found, [p.id]: r.models }); })}>
+              <Button size="sm" variant="outline" disabled={pending || !p.ready} onClick={() => run("t" + p.id, async () => { const r = await testConnectionAction(p.id); setTests({ ...tests, [p.id]: r }); if (r.models) setFound({ ...found, [p.id]: r.models }); })}>
                 {busy === "t" + p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />} Kiểm tra
               </Button>
               {p.source === "db" && (
@@ -59,7 +81,7 @@ export function ProvidersAndRouting({ providers, routing }: { providers: Provide
                 {tests[p.id]!.models && <div className="mt-1 text-slate-600">{tests[p.id]!.models!.length} mô hình khả dụng – đã đưa vào danh sách chọn bên dưới.</div>}
               </div>
             )}
-            <a href={p.consoleUrl} target="_blank" rel="noreferrer" className="block text-xs text-brand-700 hover:underline">Lấy key / xem số dư →</a>
+            <a href={p.consoleUrl} target="_blank" rel="noreferrer" className="block text-xs text-brand-700 hover:underline">{p.local ? "Mở trang quản lý LocalAI →" : "Lấy key / xem số dư →"}</a>
           </div>
         ))}
       </div>
@@ -77,7 +99,7 @@ export function ProvidersAndRouting({ providers, routing }: { providers: Provide
             <div>
               <Label>Nhà cung cấp</Label>
               <Select name={`${t}Provider`} value={prov} onChange={(e) => setProv(e.target.value as P)}>
-                {providers.map((p) => <option key={p.id} value={p.id}>{p.label}{p.source === "none" ? " (chưa có key)" : ""}</option>)}
+                {providers.map((p) => <option key={p.id} value={p.id}>{p.label}{p.ready ? "" : p.local ? " (chưa cấu hình)" : " (chưa có key)"}</option>)}
               </Select>
             </div>
             <div>
@@ -106,7 +128,7 @@ export function ProvidersAndRouting({ providers, routing }: { providers: Provide
             </div>
           ))}
         </div>
-        <p className="text-xs text-slate-500">Khi nhà cung cấp chính lỗi (hết credit, quá tải, sai mô hình), hệ thống tự thử lần lượt các nhà cung cấp dự phòng đã có key, trước khi dùng chế độ quy tắc.</p>
+        <p className="text-xs text-slate-500">Khi nhà cung cấp chính lỗi (hết credit, quá tải, sai mô hình), hệ thống tự thử lần lượt các nhà cung cấp dự phòng đã có key (hoặc LocalAI đã cấu hình địa chỉ), trước khi dùng chế độ quy tắc.</p>
         <div className="flex items-center gap-3">
           <Button type="submit" disabled={pending}>{busy === "route" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Lưu phân tầng</Button>
           <Msg m={routeMsg} />

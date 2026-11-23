@@ -2,6 +2,7 @@
 // These numbers drive the admin "Sử dụng AI" (token & cost) dashboard.
 
 import { prisma } from "../db";
+import { PROVIDERS, type ProviderId } from "./providers";
 
 export interface ModelPricing {
   input: number; // USD per 1,000,000 input tokens
@@ -36,7 +37,9 @@ export function pricingFor(model: string, overrides?: Record<string, ModelPricin
   return overrides?.[model] ?? builtinPricing(model) ?? DEFAULT_PRICING;
 }
 
-export function estimateCostUsd(model: string, inputTokens: number, outputTokens: number, overrides?: Record<string, ModelPricing>): number {
+/** Cost of a call in USD. Self-hosted providers (LocalAI) cost nothing per token unless the admin sets a price. */
+export function estimateCostUsd(model: string, inputTokens: number, outputTokens: number, overrides?: Record<string, ModelPricing>, provider?: string | null): number {
+  if (provider && PROVIDERS[provider as ProviderId]?.local && !overrides?.[model]) return 0;
   const p = pricingFor(model, overrides);
   return (inputTokens * p.input + outputTokens * p.output) / 1_000_000;
 }

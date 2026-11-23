@@ -41,6 +41,23 @@ export async function saveKeyAction(provider: string, key: string | null): Promi
   }
 }
 
+/** Save (or clear, with null) the LocalAI server address. */
+export async function saveLocalAiUrlAction(url: string | null): Promise<ActionMsg> {
+  try {
+    const user = await guard();
+    if (url !== null) {
+      const u = url.trim();
+      if (!/^https?:\/\/[^\s/]+/i.test(u)) return { ok: false, message: "Địa chỉ phải dạng http://máy-chủ:cổng/v1" };
+    }
+    await updateAiConfig({ localaiBaseUrl: url === null ? null : url.trim(), userId: user.id });
+    await logAudit({ userId: user.id, action: "AI_LOCALAI_URL_UPDATE", entityType: "AppSetting", entityId: "ai.config", detail: { url: url === null ? "removed" : url.trim() } });
+    revalidatePath("/admin/ai-config");
+    return { ok: true, message: url === null ? "Đã xóa địa chỉ đã lưu (dùng biến môi trường nếu có)." : "Đã lưu địa chỉ LocalAI." };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Lỗi" };
+  }
+}
+
 export async function testConnectionAction(provider: string, model?: string): Promise<ConnectionTestResult> {
   const user = await guard();
   const p: ProviderId = isProvider(provider) ? provider : "anthropic";
@@ -117,13 +134,13 @@ export async function recalcCostsAction(): Promise<ActionMsg> {
   try {
     const user = await guard();
     const cfg = await getAiConfig();
-    const groups = await prisma.aiUsageLog.groupBy({ by: ["model"], where: { usedFallback: false }, _sum: { costUsd: true } });
+    const groups = await prisma.aiUsageLog.groupBy({ by: ["model", "provider"], where: { usedFallback: false }, _sum: { costUsd: true } });
     let before = 0, after = 0;
     for (const g of groups) {
       before += g._sum.costUsd ?? 0;
-      const logs = await prisma.aiUsageLog.findMany({ where: { model: g.model, usedFallback: false }, select: { id: true, inputTokens: true, outputTokens: true } });
+      const logs = await prisma.aiUsageLog.findMany({ where: { model: g.model, provider: g.provider, usedFallback: false }, select: { id: true, inputTokens: true, outputTokens: true } });
       for (const l of logs) {
-        const c = estimateCostUsd(g.model, l.inputTokens, l.outputTokens, cfg.prices);
+        const c = estimateCostUsd(g.model, l.inputTokens, l.outputTokens, cfg.prices, g.provider);
         after += c;
         await prisma.aiUsageLog.update({ where: { id: l.id }, data: { costUsd: c } });
       }

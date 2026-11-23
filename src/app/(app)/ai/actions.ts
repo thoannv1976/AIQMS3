@@ -31,7 +31,7 @@ export async function estimateAiCostAction(kind: keyof typeof PROFILE, count: nu
   const prof = PROFILE[kind];
   const c = cfg.mode === "mock" ? undefined : candidatesFor(cfg, prof.tier)[0];
   const spend = await currentSpend();
-  const perItem = c ? estimateCostUsd(c.model, prof.input, prof.output, cfg.prices) : 0;
+  const perItem = c ? estimateCostUsd(c.model, prof.input, prof.output, cfg.prices, c.provider) : 0;
   const total = perItem * Math.max(0, count);
   const remainingMonth = cfg.budget.monthlyUsd == null ? null : Math.max(0, cfg.budget.monthlyUsd - spend.month);
   const remainingDay = cfg.budget.dailyUsd == null ? null : Math.max(0, cfg.budget.dailyUsd - spend.day);

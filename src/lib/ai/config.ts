@@ -7,7 +7,7 @@
 import { prisma } from "../db";
 import { decryptSecret, encryptSecret } from "../crypto";
 import type { Prisma } from "@/generated/prisma/client";
-import { PROVIDERS, PROVIDER_IDS, type ProviderId, type Tier } from "./providers";
+import { normalizeBaseUrl, PROVIDERS, PROVIDER_IDS, type ProviderId, type Tier } from "./providers";
 
 export type AiMode = "auto" | "real" | "mock";
 export const AI_CONFIG_KEY = "ai.config";
@@ -34,9 +34,16 @@ export interface StoredAiConfig {
   prices?: Record<string, PriceOverride>;
   budget?: Partial<BudgetConfig>;
   autoEvidenceCheck?: boolean;
+  /** LocalAI server address (OpenAI-compatible), e.g. http://host.docker.internal:8080/v1. */
+  localaiBaseUrl?: string;
 }
 
-export interface ProviderKeyInfo { key: string | null; last4: string | null; source: "db" | "env" | "none" }
+/**
+ * `ready` = the provider can be called: it has a key, or (self-hosted LocalAI) a server address is configured.
+ * Gate on `ready`, never on `key`: LocalAI works without a key.
+ */
+export interface ProviderKeyInfo { key: string | null; last4: string | null; source: "db" | "env" | "none"; ready: boolean }
+export interface LocalAiInfo { baseUrl: string | null; source: "db" | "env" | "none" }
 
 export interface AiConfig {
   mode: AiMode;
@@ -46,6 +53,7 @@ export interface AiConfig {
   prices: Record<string, PriceOverride>;
   budget: BudgetConfig;
   autoEvidenceCheck: boolean;
+  localai: LocalAiInfo;
   // Legacy view (the "high" tier), kept for older call sites.
   model: string;
   apiKey: string | null;
@@ -66,22 +74,31 @@ async function readStored(): Promise<StoredAiConfig> {
   return (row?.value as StoredAiConfig | undefined) ?? {};
 }
 
-function resolveKey(stored: StoredAiConfig, p: ProviderId): ProviderKeyInfo {
+/** LocalAI address: saved in the database (admin page) first, then LOCALAI_BASE_URL. Not set = LocalAI is off. */
+function resolveLocalAi(stored: StoredAiConfig): LocalAiInfo {
+  if (stored.localaiBaseUrl?.trim()) return { baseUrl: normalizeBaseUrl(stored.localaiBaseUrl), source: "db" };
+  const env = process.env.LOCALAI_BASE_URL?.trim();
+  return env ? { baseUrl: normalizeBaseUrl(env), source: "env" } : { baseUrl: null, source: "none" };
+}
+
+function resolveKey(stored: StoredAiConfig, p: ProviderId, localai: LocalAiInfo): ProviderKeyInfo {
+  const keyless = PROVIDERS[p].local ? Boolean(localai.baseUrl) : false;
   const db = stored.keys?.[p] ?? (p === "anthropic" && stored.apiKeyEnc ? { enc: stored.apiKeyEnc, last4: stored.apiKeyLast4 ?? "" } : undefined);
   const dbKey = db ? decryptSecret(db.enc) : null;
-  if (dbKey) return { key: dbKey, last4: db?.last4 || dbKey.slice(-4), source: "db" };
+  if (dbKey) return { key: dbKey, last4: db?.last4 || dbKey.slice(-4), source: "db", ready: PROVIDERS[p].local ? keyless : true };
   const env = process.env[PROVIDERS[p].envVar]?.trim() || (p === "gemini" ? process.env.GOOGLE_API_KEY?.trim() : undefined) || null;
-  return env ? { key: env, last4: env.slice(-4), source: "env" } : { key: null, last4: null, source: "none" };
+  return env ? { key: env, last4: env.slice(-4), source: "env", ready: PROVIDERS[p].local ? keyless : true } : { key: null, last4: null, source: "none", ready: keyless };
 }
 
 export async function getAiConfig(): Promise<AiConfig> {
   const s = await readStored();
-  const keys = Object.fromEntries(PROVIDER_IDS.map((p) => [p, resolveKey(s, p)])) as Record<ProviderId, ProviderKeyInfo>;
+  const localai = resolveLocalAi(s);
+  const keys = Object.fromEntries(PROVIDER_IDS.map((p) => [p, resolveKey(s, p, localai)])) as Record<ProviderId, ProviderKeyInfo>;
   const pick = (tier: Tier): TierChoice => {
     const t = s.tiers?.[tier];
     if (t?.provider && t.model) return t;
-    // First provider that has a key and a default model for the tier (Claude first).
-    for (const p of PROVIDER_IDS) if (keys[p].key && PROVIDERS[p].defaults[tier]) return { provider: p, model: PROVIDERS[p].defaults[tier] };
+    // First usable provider with a default model for the tier (Claude first, LocalAI last).
+    for (const p of PROVIDER_IDS) if (keys[p].ready && PROVIDERS[p].defaults[tier]) return { provider: p, model: PROVIDERS[p].defaults[tier] };
     return { provider: "anthropic", model: PROVIDERS.anthropic.defaults[tier] };
   };
   const tiers = { high: pick("high"), economy: pick("economy") };
@@ -96,6 +113,7 @@ export async function getAiConfig(): Promise<AiConfig> {
     prices: s.prices ?? {},
     budget,
     autoEvidenceCheck: s.autoEvidenceCheck ?? true,
+    localai,
     model: tiers.high.model,
     apiKey: hi.key,
     apiKeyLast4: hi.last4,
@@ -106,7 +124,7 @@ export async function getAiConfig(): Promise<AiConfig> {
 /** Whether at least one provider can be called. */
 export async function aiLiveEnabled(): Promise<boolean> {
   const cfg = await getAiConfig();
-  return cfg.mode !== "mock" && PROVIDER_IDS.some((p) => cfg.keys[p].key);
+  return cfg.mode !== "mock" && PROVIDER_IDS.some((p) => cfg.keys[p].ready);
 }
 
 async function writeStored(next: StoredAiConfig, userId?: string | null) {
@@ -127,6 +145,8 @@ export async function updateAiConfig(patch: {
   prices?: Record<string, PriceOverride | null>;
   budget?: Partial<BudgetConfig>;
   autoEvidenceCheck?: boolean;
+  /** Non-empty string sets the LocalAI address, null removes it (back to LOCALAI_BASE_URL). */
+  localaiBaseUrl?: string | null;
   userId?: string | null;
 }): Promise<void> {
   const cur = await readStored();
@@ -152,6 +172,8 @@ export async function updateAiConfig(patch: {
   }
   if (patch.budget) next.budget = { ...(cur.budget ?? {}), ...patch.budget };
   if (typeof patch.autoEvidenceCheck === "boolean") next.autoEvidenceCheck = patch.autoEvidenceCheck;
+  if (patch.localaiBaseUrl === null) delete next.localaiBaseUrl;
+  else if (patch.localaiBaseUrl?.trim()) next.localaiBaseUrl = normalizeBaseUrl(patch.localaiBaseUrl);
   await writeStored(next, patch.userId);
 }
 
