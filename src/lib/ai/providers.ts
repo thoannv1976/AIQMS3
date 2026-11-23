@@ -198,6 +198,47 @@ function localAiNetworkError(e: unknown, baseUrl: string): ProviderError {
 }
 
 /**
+ * Small local models often close JSON brackets in the wrong order (e.g. `…"]` written as `…"}]`) or stop before the
+ * last bracket. Re-balance brackets outside strings: a closer that does not match the innermost open bracket closes
+ * the brackets in between, a stray closer is dropped, missing closers are appended.
+ */
+export function repairJson(s: string): string {
+  const out: string[] = [];
+  const stack: string[] = [];
+  let inStr = false, esc = false;
+  for (const ch of s) {
+    if (inStr) {
+      out.push(ch);
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') { inStr = true; out.push(ch); continue; }
+    if (ch === "{" || ch === "[") { stack.push(ch === "{" ? "}" : "]"); out.push(ch); continue; }
+    if (ch === "}" || ch === "]") {
+      if (!stack.includes(ch)) continue; // stray closer
+      while (stack.length && stack[stack.length - 1] !== ch) out.push(stack.pop()!);
+      out.push(stack.pop()!);
+      continue;
+    }
+    out.push(ch);
+  }
+  if (inStr) out.push('"');
+  while (stack.length) out.push(stack.pop()!);
+  return out.join("");
+}
+
+/** If the answer is meant to be JSON but does not parse, return the repaired JSON when that parses. */
+function fixLocalJson(text: string): string {
+  const body = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+  if (!/^[[{]/.test(body)) return text;
+  try { JSON.parse(body); return text; } catch { /* try to repair */ }
+  const fixed = repairJson(body);
+  try { JSON.parse(fixed); return fixed; } catch { return text; }
+}
+
+/**
  * Fit prompt + answer into the local model's context window: first shrink the answer budget (not below 1024
  * tokens), then cut the end of the prompt — prompts put instructions first and source material (evidence) last.
  * Token counts are estimated conservatively for Vietnamese (~2.2 characters per token).
@@ -249,7 +290,7 @@ async function callLocalAI(c: ProviderCall): Promise<ProviderResult> {
   if (!text && (choice?.message?.reasoning || choice?.message?.reasoning_content)) {
     throw new ProviderError("localai", `Mô hình ${c.model} dùng hết ${fit.maxTokens} token cho phần suy nghĩ, chưa có câu trả lời – tăng giới hạn token hoặc chọn mô hình khác.`);
   }
-  return { text, inputTokens: usage?.prompt_tokens ?? 0, outputTokens: usage?.completion_tokens ?? 0 };
+  return { text: fixLocalJson(text), inputTokens: usage?.prompt_tokens ?? 0, outputTokens: usage?.completion_tokens ?? 0 };
 }
 
 export async function callProvider(c: ProviderCall): Promise<ProviderResult> {
