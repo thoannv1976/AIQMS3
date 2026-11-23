@@ -266,22 +266,38 @@ async function callLocalAI(c: ProviderCall): Promise<ProviderResult> {
   if (c.attachment) throw new ProviderError("localai", "LocalAI (máy chủ nội bộ) chưa hỗ trợ đọc tệp PDF/ảnh (OCR) – cần Claude, OpenAI hoặc Gemini cho việc này.");
   if (!c.baseUrl) throw new ProviderError("localai", "Chưa cấu hình địa chỉ LocalAI.");
   const base = normalizeBaseUrl(c.baseUrl);
-  const fit = fitLocalContext(c.system ?? "", c.prompt, c.maxTokens);
+  let fit = fitLocalContext(c.system ?? "", c.prompt, c.maxTokens);
   if (fit.trimmed) console.warn(`[ai] localai/${c.model}: prompt trimmed to fit ${LOCALAI_CONTEXT_TOKENS}-token context`);
+  const send = () => postJson("localai", `${base}/chat/completions`, c.apiKey ? { Authorization: `Bearer ${c.apiKey}` } : {}, {
+    model: c.model,
+    max_tokens: fit.maxTokens,
+    temperature: 0.3,
+    // LocalAI v4 only skips the thinking phase with reasoning_effort "none"; enable_thinking alone still lets the
+    // model think (measured: 450 vs 66 output tokens, 11.5 s vs 1.8 s for the same JSON answer).
+    reasoning_effort: "none",
+    chat_template_kwargs: { enable_thinking: false },
+    messages: [...(c.system ? [{ role: "system", content: c.system }] : []), { role: "user", content: fit.prompt }],
+  }, LOCALAI_TIMEOUT_MS);
   let json: Record<string, unknown>;
   try {
-    json = await postJson("localai", `${base}/chat/completions`, c.apiKey ? { Authorization: `Bearer ${c.apiKey}` } : {}, {
-      model: c.model,
-      max_tokens: fit.maxTokens,
-      temperature: 0.3,
-      // LocalAI v4 only skips the thinking phase with reasoning_effort "none"; enable_thinking alone still lets the
-      // model think (measured: 450 vs 66 output tokens, 11.5 s vs 1.8 s for the same JSON answer).
-      reasoning_effort: "none",
-      chat_template_kwargs: { enable_thinking: false },
-      messages: [...(c.system ? [{ role: "system", content: c.system }] : []), { role: "user", content: fit.prompt }],
-    }, LOCALAI_TIMEOUT_MS);
+    json = await send();
   } catch (e) {
-    throw localAiNetworkError(e, base);
+    // Number-heavy text (tables) packs fewer characters per token than estimated: LocalAI then reports the real
+    // size ("request (9806 tokens) exceeds the available context size (8192 tokens)"). Shrink to fit and retry once.
+    const m = e instanceof ProviderError ? /\((\d+) tokens\) exceeds the available context size \((\d+) tokens\)/.exec(e.message) : null;
+    if (!m) throw localAiNetworkError(e, base);
+    const actual = Number(m[1]), ctx = Number(m[2]);
+    const promptShare = fit.prompt.length / Math.max(1, fit.prompt.length + (c.system ?? "").length);
+    const overflow = actual + fit.maxTokens + 256 - ctx;
+    const ratio = Math.max(0.1, 1 - (overflow / (actual * promptShare)) * 1.1);
+    const note = "\n…(phần cuối đã được rút gọn cho vừa giới hạn ngữ cảnh của mô hình nội bộ)";
+    fit = { prompt: fit.prompt.slice(0, Math.floor(fit.prompt.length * ratio)) + note, maxTokens: fit.maxTokens, trimmed: true };
+    console.warn(`[ai] localai/${c.model}: ${actual}-token prompt over ${ctx} – retry with ${Math.round(ratio * 100)}% of the prompt`);
+    try {
+      json = await send();
+    } catch (e2) {
+      throw localAiNetworkError(e2, base);
+    }
   }
   const choice = (json.choices as Array<{ message?: { content?: string | null; reasoning?: string; reasoning_content?: string }; finish_reason?: string }> | undefined)?.[0];
   const usage = json.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined;
