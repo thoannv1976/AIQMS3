@@ -1,10 +1,30 @@
-// Provider adapters: one call shape for Claude (official Anthropic SDK), OpenAI and Google Gemini (REST).
+// Provider adapters: one call shape for Claude (official Anthropic SDK), OpenAI and Google Gemini (REST),
+// and LocalAI (self-hosted, OpenAI-compatible API on the school's own machine).
 // Each adapter returns text + token usage so the caller can price and log the call.
 
-export type ProviderId = "anthropic" | "openai" | "gemini";
-export const PROVIDER_IDS: ProviderId[] = ["anthropic", "openai", "gemini"];
+export type ProviderId = "anthropic" | "openai" | "gemini" | "localai";
+export const PROVIDER_IDS: ProviderId[] = ["anthropic", "openai", "gemini", "localai"];
 
-export const PROVIDERS: Record<ProviderId, { label: string; keyHint: string; envVar: string; defaults: { high: string; economy: string }; suggested: string[]; consoleUrl: string }> = {
+export interface ProviderInfo {
+  label: string;
+  keyHint: string;
+  envVar: string;
+  defaults: { high: string; economy: string };
+  suggested: string[];
+  consoleUrl: string;
+  /** Self-hosted: no API key required (usable once a base URL is set), no token cost. */
+  local?: boolean;
+  /** Can read PDF / image attachments (OCR, vision). */
+  vision: boolean;
+}
+
+/** Default LocalAI address as seen from the app container (LocalAI running on the same PC). */
+export const LOCALAI_DEFAULT_BASE_URL = "http://host.docker.internal:8080/v1";
+const LOCALAI_TIMEOUT_MS = Number(process.env.LOCALAI_TIMEOUT_MS || 300_000);
+/** Context window of the local models (LocalAI context_size). Prompts are fitted into it instead of failing. */
+const LOCALAI_CONTEXT_TOKENS = Number(process.env.LOCALAI_CONTEXT_TOKENS || 8192);
+
+export const PROVIDERS: Record<ProviderId, ProviderInfo> = {
   anthropic: {
     label: "Claude (Anthropic)",
     keyHint: "sk-ant-…",
@@ -12,6 +32,7 @@ export const PROVIDERS: Record<ProviderId, { label: string; keyHint: string; env
     defaults: { high: "claude-sonnet-5-5", economy: "claude-haiku-5-5" },
     suggested: ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5"],
     consoleUrl: "https://console.anthropic.com/settings/billing",
+    vision: true,
   },
   openai: {
     label: "OpenAI (GPT)",
@@ -20,6 +41,7 @@ export const PROVIDERS: Record<ProviderId, { label: string; keyHint: string; env
     defaults: { high: "", economy: "" },
     suggested: [],
     consoleUrl: "https://platform.openai.com/settings/organization/billing",
+    vision: true,
   },
   gemini: {
     label: "Google Gemini",
@@ -28,8 +50,27 @@ export const PROVIDERS: Record<ProviderId, { label: string; keyHint: string; env
     defaults: { high: "", economy: "" },
     suggested: [],
     consoleUrl: "https://aistudio.google.com/apikey",
+    vision: true,
+  },
+  localai: {
+    label: "LocalAI (máy chủ nội bộ)",
+    keyHint: "không bắt buộc",
+    envVar: "LOCALAI_API_KEY",
+    defaults: { high: "ornith-1.5-9b-q4", economy: "ornith-1.5-9b-q4" },
+    suggested: ["ornith-1.5-9b-q4", "granite-4.2-8b-q4", "qwen3.8-4b-q4"],
+    consoleUrl: "http://localhost:8080/",
+    local: true,
+    vision: false,
   },
 };
+
+/** Embedding / reranker / speech / image models a LocalAI server lists that cannot answer chat prompts. */
+const NON_CHAT_MODEL = /embed|rerank|whisper|wav2vec|piper|vits|tts|stable-?diffusion|sdxl|flux|bark|clip|asr|\.tar|\.bz2/i;
+
+export function normalizeBaseUrl(url: string): string {
+  const u = url.trim().replace(/\/+$/, "");
+  return /\/v1$/.test(u) ? u : `${u}/v1`;
+}
 
 export type Tier = "high" | "economy";
 
@@ -41,6 +82,8 @@ export interface ProviderCall {
   prompt: string;
   maxTokens: number;
   tier: Tier;
+  /** Server address for self-hosted providers (LocalAI), e.g. http://host.docker.internal:8080/v1. */
+  baseUrl?: string;
   /** Optional file (PDF or image) for OCR / vision. */
   attachment?: { mediaType: string; base64: string; fileName: string };
 }
@@ -92,8 +135,8 @@ async function callAnthropic(c: ProviderCall): Promise<ProviderResult> {
   }
 }
 
-async function postJson(provider: ProviderId, url: string, headers: Record<string, string>, body: unknown): Promise<Record<string, unknown>> {
-  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body), signal: AbortSignal.timeout(280_000) });
+async function postJson(provider: ProviderId, url: string, headers: Record<string, string>, body: unknown, timeoutMs = 280_000): Promise<Record<string, unknown>> {
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body), signal: AbortSignal.timeout(timeoutMs) });
   const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
     const err = json.error as { message?: string } | undefined;
@@ -143,14 +186,172 @@ async function callGemini(c: ProviderCall): Promise<ProviderResult> {
   return { text, inputTokens: u?.promptTokenCount ?? 0, outputTokens: (u?.candidatesTokenCount ?? 0) + (u?.thoughtsTokenCount ?? 0) };
 }
 
+/** Turn a network failure into a message an admin can act on (LocalAI off, wrong address, model still loading). */
+function localAiNetworkError(e: unknown, baseUrl: string): ProviderError {
+  if (e instanceof ProviderError) return e;
+  const err = e as { name?: string; message?: string; cause?: { code?: string } };
+  if (err?.name === "TimeoutError" || err?.name === "AbortError") {
+    return new ProviderError("localai", `LocalAI không trả lời sau ${Math.round(LOCALAI_TIMEOUT_MS / 1000)} giây (mô hình đang nạp hoặc câu hỏi quá dài).`);
+  }
+  const code = err?.cause?.code ? ` (${err.cause.code})` : "";
+  return new ProviderError("localai", `Không kết nối được LocalAI tại ${baseUrl}${code} – kiểm tra LocalAI đã bật và địa chỉ đúng.`);
+}
+
+/**
+ * Small local models often close JSON brackets in the wrong order (e.g. `…"]` written as `…"}]`) or stop before the
+ * last bracket. Re-balance brackets outside strings: a closer that does not match the innermost open bracket closes
+ * the brackets in between, a stray closer is dropped, missing closers are appended.
+ */
+export function repairJson(s: string): string {
+  const out: string[] = [];
+  const stack: string[] = [];
+  let inStr = false, esc = false;
+  for (const ch of s) {
+    if (inStr) {
+      out.push(ch);
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') { inStr = true; out.push(ch); continue; }
+    if (ch === "{" || ch === "[") { stack.push(ch === "{" ? "}" : "]"); out.push(ch); continue; }
+    if (ch === "}" || ch === "]") {
+      if (!stack.includes(ch)) continue; // stray closer
+      while (stack.length && stack[stack.length - 1] !== ch) out.push(stack.pop()!);
+      out.push(stack.pop()!);
+      continue;
+    }
+    out.push(ch);
+  }
+  if (inStr) out.push('"');
+  while (stack.length) out.push(stack.pop()!);
+  return out.join("");
+}
+
+/** If the answer is meant to be JSON but does not parse, return the repaired JSON when that parses. */
+function fixLocalJson(text: string): string {
+  const body = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+  if (!/^[[{]/.test(body)) return text;
+  try { JSON.parse(body); return text; } catch { /* try to repair */ }
+  const fixed = repairJson(body);
+  try { JSON.parse(fixed); return fixed; } catch { /* answer cut off mid-element */ }
+  // Answer stopped at the token limit inside an element: keep the complete elements of the top-level array/object.
+  const cut = keepCompleteElements(body);
+  if (cut) try { JSON.parse(cut); return cut; } catch { /* give up */ }
+  return text;
+}
+
+/** For JSON truncated mid-element, cut after the last complete top-level element and close the container. */
+function keepCompleteElements(s: string): string | null {
+  const open = s.trimStart()[0];
+  if (open !== "[" && open !== "{") return null;
+  let depth = 0, inStr = false, esc = false, lastEnd = -1;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) { if (esc) esc = false; else if (ch === "\\") esc = true; else if (ch === '"') inStr = false; continue; }
+    if (ch === '"') { inStr = true; continue; }
+    if (ch === "{" || ch === "[") depth++;
+    else if (ch === "}" || ch === "]") { depth--; if (depth === 1) lastEnd = i; }
+  }
+  if (lastEnd < 0) return null;
+  return repairJson(s.slice(0, lastEnd + 1));
+}
+
+/**
+ * Fit prompt + answer into the local model's context window: first shrink the answer budget (not below 1024
+ * tokens), then cut the end of the prompt — prompts put instructions first and source material (evidence) last.
+ * Token counts are estimated conservatively for Vietnamese (~2.2 characters per token).
+ */
+export function fitLocalContext(system: string, prompt: string, maxTokens: number, ctx = LOCALAI_CONTEXT_TOKENS): { prompt: string; maxTokens: number; trimmed: boolean } {
+  const CHARS_PER_TOKEN = 2.2;
+  const reserve = 256; // chat template + safety margin
+  const tokens = (s: string) => Math.ceil(s.length / CHARS_PER_TOKEN);
+  const input = tokens(system) + tokens(prompt);
+  let out = maxTokens;
+  if (input + out + reserve > ctx) out = Math.max(Math.min(maxTokens, 1024), ctx - input - reserve);
+  const room = ctx - out - reserve - tokens(system);
+  if (tokens(prompt) <= room) return { prompt, maxTokens: out, trimmed: false };
+  const note = "\n…(phần cuối đã được rút gọn cho vừa giới hạn ngữ cảnh của mô hình nội bộ)";
+  const keep = Math.max(0, Math.floor(room * CHARS_PER_TOKEN) - note.length);
+  return { prompt: prompt.slice(0, keep) + note, maxTokens: out, trimmed: true };
+}
+
+/**
+ * LocalAI speaks the OpenAI chat API. The installed models are "thinking" models: thinking is switched off via
+ * reasoning_effort "none" (+ chat_template_kwargs for other servers), and only message.content is used
+ * (message.reasoning is never shown as the answer).
+ */
+async function callLocalAI(c: ProviderCall): Promise<ProviderResult> {
+  if (c.attachment) throw new ProviderError("localai", "LocalAI (máy chủ nội bộ) chưa hỗ trợ đọc tệp PDF/ảnh (OCR) – cần Claude, OpenAI hoặc Gemini cho việc này.");
+  if (!c.baseUrl) throw new ProviderError("localai", "Chưa cấu hình địa chỉ LocalAI.");
+  const base = normalizeBaseUrl(c.baseUrl);
+  let fit = fitLocalContext(c.system ?? "", c.prompt, c.maxTokens);
+  if (fit.trimmed) console.warn(`[ai] localai/${c.model}: prompt trimmed to fit ${LOCALAI_CONTEXT_TOKENS}-token context`);
+  const send = () => postJson("localai", `${base}/chat/completions`, c.apiKey ? { Authorization: `Bearer ${c.apiKey}` } : {}, {
+    model: c.model,
+    max_tokens: fit.maxTokens,
+    temperature: 0.3,
+    // LocalAI v4 only skips the thinking phase with reasoning_effort "none"; enable_thinking alone still lets the
+    // model think (measured: 450 vs 66 output tokens, 11.5 s vs 1.8 s for the same JSON answer).
+    reasoning_effort: "none",
+    chat_template_kwargs: { enable_thinking: false },
+    messages: [...(c.system ? [{ role: "system", content: c.system }] : []), { role: "user", content: fit.prompt }],
+  }, LOCALAI_TIMEOUT_MS);
+  let json: Record<string, unknown>;
+  try {
+    json = await send();
+  } catch (e) {
+    // Number-heavy text (tables) packs fewer characters per token than estimated: LocalAI then reports the real
+    // size ("request (9806 tokens) exceeds the available context size (8192 tokens)"). Shrink to fit and retry once.
+    const m = e instanceof ProviderError ? /\((\d+) tokens\) exceeds the available context size \((\d+) tokens\)/.exec(e.message) : null;
+    if (!m) throw localAiNetworkError(e, base);
+    const actual = Number(m[1]), ctx = Number(m[2]);
+    const promptShare = fit.prompt.length / Math.max(1, fit.prompt.length + (c.system ?? "").length);
+    const overflow = actual + fit.maxTokens + 256 - ctx;
+    const ratio = Math.max(0.1, 1 - (overflow / (actual * promptShare)) * 1.1);
+    const note = "\n…(phần cuối đã được rút gọn cho vừa giới hạn ngữ cảnh của mô hình nội bộ)";
+    fit = { prompt: fit.prompt.slice(0, Math.floor(fit.prompt.length * ratio)) + note, maxTokens: fit.maxTokens, trimmed: true };
+    console.warn(`[ai] localai/${c.model}: ${actual}-token prompt over ${ctx} – retry with ${Math.round(ratio * 100)}% of the prompt`);
+    try {
+      json = await send();
+    } catch (e2) {
+      throw localAiNetworkError(e2, base);
+    }
+  }
+  const choice = (json.choices as Array<{ message?: { content?: string | null; reasoning?: string; reasoning_content?: string }; finish_reason?: string }> | undefined)?.[0];
+  const usage = json.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined;
+  // Some templates still emit <think>…</think> inline: strip it.
+  const text = (choice?.message?.content ?? "").replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+  if (!text && (choice?.message?.reasoning || choice?.message?.reasoning_content)) {
+    throw new ProviderError("localai", `Mô hình ${c.model} dùng hết ${fit.maxTokens} token cho phần suy nghĩ, chưa có câu trả lời – tăng giới hạn token hoặc chọn mô hình khác.`);
+  }
+  if (process.env.LOCALAI_DEBUG === "1") console.log(`[ai] localai/${c.model} raw (${usage?.completion_tokens ?? "?"} tok):`, JSON.stringify(text.slice(0, 3000)));
+  return { text: fixLocalJson(text), inputTokens: usage?.prompt_tokens ?? 0, outputTokens: usage?.completion_tokens ?? 0 };
+}
+
 export async function callProvider(c: ProviderCall): Promise<ProviderResult> {
   if (c.provider === "anthropic") return callAnthropic(c);
   if (c.provider === "openai") return callOpenAI(c);
+  if (c.provider === "localai") return callLocalAI(c);
   return callGemini(c);
 }
 
 /** Text-generation models the key can use (for the model pickers on the config page). */
-export async function listModels(provider: ProviderId, apiKey: string): Promise<string[]> {
+export async function listModels(provider: ProviderId, apiKey: string, baseUrl?: string): Promise<string[]> {
+  if (provider === "localai") {
+    if (!baseUrl) throw new ProviderError("localai", "Chưa cấu hình địa chỉ LocalAI.");
+    const base = normalizeBaseUrl(baseUrl);
+    let res: Response;
+    try {
+      res = await fetch(`${base}/models`, { headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {}, signal: AbortSignal.timeout(20_000) });
+    } catch (e) {
+      throw localAiNetworkError(e, base);
+    }
+    const json = (await res.json().catch(() => ({}))) as { data?: Array<{ id: string }>; error?: { message?: string } };
+    if (!res.ok) throw new ProviderError("localai", json.error?.message ?? `HTTP ${res.status}`, res.status);
+    return (json.data ?? []).map((m) => m.id).filter((id) => !NON_CHAT_MODEL.test(id)).sort();
+  }
   if (provider === "anthropic") {
     const { default: Anthropic } = await import("@anthropic-ai/sdk");
     const client = new Anthropic({ apiKey });

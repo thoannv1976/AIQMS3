@@ -6,6 +6,7 @@ import { can } from "@/lib/rbac";
 import { storageDriver } from "@/lib/storage";
 import { getAiConfig, AI_MODE_LABELS } from "@/lib/ai/config";
 import { AI_LAST_ERROR_KEY } from "@/lib/ai/client";
+import { PROVIDERS } from "@/lib/ai/providers";
 import { pgVectorEnabled } from "@/lib/ai/vector";
 import { Card, CardContent, CardHeader, CardTitle, PageHeader, Badge, Th, Td } from "@/components/ui";
 import { formatDateTime } from "@/lib/utils";
@@ -49,7 +50,8 @@ async function loadStatus() {
   const doc = Object.fromEntries(docStatus.map((d) => [d.status, d._count._all])) as Record<string, number>;
   const stuck = (doc.PENDING ?? 0) + (doc.PROCESSING ?? 0);
   const failed = doc.FAILED ?? 0;
-  const aiLive = ai.mode !== "mock" && Boolean(ai.apiKey);
+  // LocalAI needs no key: gate on the high tier's provider being usable.
+  const aiLive = ai.mode !== "mock" && ai.keys[ai.tiers.high.provider].ready;
   const cronAgeH = lastCron ? (Date.now() - lastCron.createdAt.getTime()) / 3600000 : null;
   return { dbOk, dbMs, users, programs, evidence, documents, sections, surveys, doc, stuck, failed, aiLive, ai, ai24, aiFail24, lastCron, cronAgeH, lastMigration, now, aiLastError };
 }
@@ -70,7 +72,7 @@ export default async function SystemStatusPage() {
           <CardContent className="space-y-2.5">
             <Ok ok={dbOk}>Cơ sở dữ liệu {dbOk ? `kết nối tốt (${dbMs} ms)` : "KHÔNG kết nối được"} · tìm kiếm vector {pgVectorEnabled() ? "pgvector" : "trong ứng dụng"}</Ok>
             <Ok ok={driver === "gcs"} warn={driver !== "gcs"}>Lưu trữ tệp: {driver === "gcs" ? `Google Cloud Storage (${process.env.GCS_BUCKET ?? "?"})` : "thư mục cục bộ (chỉ dùng khi phát triển)"}</Ok>
-            <Ok ok={aiLive} warn={!aiLive}>AI: {AI_MODE_LABELS[ai.mode]}{aiLive ? ` · ${ai.model}` : " · chưa có khóa API, đang dùng quy tắc dự phòng"} · 24h qua {ai24} lượt gọi{aiFail24 ? `, ${aiFail24} lỗi` : ""}</Ok>
+            <Ok ok={aiLive} warn={!aiLive}>AI: {AI_MODE_LABELS[ai.mode]}{aiLive ? ` · ${PROVIDERS[ai.tiers.high.provider].label} · ${ai.model}` : " · chưa cấu hình nhà cung cấp AI, đang dùng quy tắc dự phòng"} · 24h qua {ai24} lượt gọi{aiFail24 ? `, ${aiFail24} lỗi` : ""}</Ok>
             {aiLastError && aiFail24 > 0 && (
               <Ok ok={false}>
                 Lỗi AI gần nhất ({formatDateTime(aiLastError.at)}): <span className="font-mono text-xs">{aiLastError.message}</span>
